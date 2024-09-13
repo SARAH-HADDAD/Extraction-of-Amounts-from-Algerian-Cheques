@@ -1,16 +1,16 @@
 import os
 
 # Define the folder containing the images
-folder_path = './'
+folder_path = './data/'
 
 # Get a list of all .png files in the folder
 images = [f for f in os.listdir(folder_path) if f.endswith('.png')]
-
+print(images)
 # Sort the list of images (if needed)
 images.sort()
 
 # Rename the images
-for i, image in enumerate(images, start=39):
+for i, image in enumerate(images, start=75):
     # Format the new name with 6 digits and .png extension
     new_name = f"{i:06}.png"
     
