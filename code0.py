@@ -10,7 +10,7 @@ images = [f for f in os.listdir(folder_path) if f.endswith('.png')]
 images.sort()
 
 # Rename the images
-for i, image in enumerate(images):
+for i, image in enumerate(images, start=39):
     # Format the new name with 6 digits and .png extension
     new_name = f"{i:06}.png"
     
