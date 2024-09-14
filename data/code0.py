@@ -10,7 +10,7 @@ print(images)
 images.sort()
 
 # Rename the images
-for i, image in enumerate(images, start=75):
+for i, image in enumerate(images, start=150):
     # Format the new name with 6 digits and .png extension
     new_name = f"{i:06}.png"
     
