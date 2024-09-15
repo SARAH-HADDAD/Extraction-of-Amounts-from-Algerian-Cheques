@@ -1,24 +1,30 @@
+import pandas as pd
+import shutil
 import os
 
-# Define the folder containing the images
-folder_path = './data/'
+# Load the CSV file
+csv_file = 'train.csv'
+df = pd.read_csv(csv_file)
 
-# Get a list of all .png files in the folder
-images = [f for f in os.listdir(folder_path) if f.endswith('.png')]
-print(images)
-# Sort the list of images (if needed)
-images.sort()
+# Define source and destination directories
+source_dir = 'fr/data'
+destination_dir = 'fr/train'
 
-# Rename the images
-for i, image in enumerate(images, start=170):
-    # Format the new name with 6 digits and .png extension
-    new_name = f"{i:06}.png"
-    
-    # Get the full path of the current and new names
-    old_path = os.path.join(folder_path, image)
-    new_path = os.path.join(folder_path, new_name)
-    
-    # Rename the file
-    os.rename(old_path, new_path)
+# Create the destination directory if it does not exist
+if not os.path.exists(destination_dir):
+    os.makedirs(destination_dir)
 
-print("Renaming completed!")
+# Iterate over the rows of the dataframe and move the files
+for index, row in df.iterrows():
+    file_name = row['file_name']
+    src_path = os.path.join(source_dir, file_name)
+    dst_path = os.path.join(destination_dir, file_name)
+
+    # Check if the file exists before moving
+    if os.path.exists(src_path):
+        shutil.move(src_path, dst_path)
+        print(f'Moved {file_name} to {destination_dir}')
+    else:
+        print(f'{file_name} does not exist in the source directory')
+
+print('File moving complete.')
