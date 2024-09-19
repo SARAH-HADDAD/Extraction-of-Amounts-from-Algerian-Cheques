@@ -1,0 +1,6 @@
+train: ../train/images
+val: ../valid/images
+test: ../test/images
+
+nc: 3
+names: ['Montant en lettres (première ligne)', 'Montant en lettres (deuxième ligne)', 'Montant en chiffres']
