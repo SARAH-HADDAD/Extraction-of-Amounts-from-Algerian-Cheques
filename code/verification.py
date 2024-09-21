@@ -4,11 +4,11 @@ from PIL import Image
 import os
 
 
-csv_file = 'data/fr/valid/valid.csv'  
+csv_file = 'data/numbers_data/train/train.csv'  
 df = pd.read_csv(csv_file)
 
 
-image_folder = 'data/fr/valid'  
+image_folder = 'data/numbers_data/train'  
 
 for index, row in df.iterrows():
     image_path = os.path.join(image_folder, row['file_name'])
