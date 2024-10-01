@@ -2,8 +2,8 @@ import os
 from pathlib import Path
 
 # Path to the input directory containing images
-input_dir = 'idk/'
-start_number = 434  # Starting number for renaming
+input_dir = 'nums/'
+start_number = 50  # Starting number for renaming
 file_extension = '.jpg'  # Assuming all images are .png
 
 # Get all image paths in the directory
