@@ -41,7 +41,7 @@ class ChequeClassifier(nn.Module):
 
 def classify_cheque(original_path):
     model = ChequeClassifier(num_classes=5)
-    model.load_state_dict(torch.load("models/cheque_classifier.pth"))
+    model.load_state_dict(torch.load("/Users/sarahhaddad/Documents/GitHub/TrOCR/models/cheque_classifier.pth"))
     model.eval()
 
     def preprocess_image(image_path, transform):
