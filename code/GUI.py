@@ -1,11 +1,15 @@
 import sys
+import certifi
+import pymongo
+from datetime import datetime
 from PyQt6.QtWidgets import (QApplication, QMainWindow, QWidget, QVBoxLayout, QHBoxLayout, 
-                             QPushButton, QLabel, QFileDialog, QFrame, QGridLayout)
+                             QPushButton, QLabel, QFileDialog, QFrame, QGridLayout, QMessageBox)
 from PyQt6.QtGui import QPixmap, QFont
 from PyQt6.QtCore import Qt
 from PIL import Image
 from cheque_classifier import classify_cheque
 from extraction import process_cheque
+
 class ChequeProcessor(QMainWindow):
     def __init__(self):
         super().__init__()
@@ -64,19 +68,48 @@ class ChequeProcessor(QMainWindow):
             self.process_cheque(file_path)
 
     def process_cheque(self, file_path):
-        # Display the image in the main window
         try:
             pixmap = QPixmap(file_path)
             pixmap = pixmap.scaled(300, 300, Qt.AspectRatioMode.KeepAspectRatio)
             self.upload_frame.setPixmap(pixmap)
-            # Classify the cheque
+            
             bank = classify_cheque(file_path)
+            result = process_cheque(file_path)
+            
+            # Insert to MongoDB if similarity is high
+            insert_result = self.insert_to_mongodb(result["montant_en_chiffres"], result["similarite"], bank)
+            
             # Show result window
-            self.show_result_window(file_path, bank)
+            self.show_result_window(file_path, bank, result, insert_result)
         except Exception as e:
             QMessageBox.critical(self, "Erreur", f"Une erreur est survenue: {str(e)}")
 
-    def show_result_window(self, file_path, bank):
+    def insert_to_mongodb(self, montant, similarity_percentage, bank):
+        if similarity_percentage >= 99:
+            try:
+                ca = certifi.where()
+                client = pymongo.MongoClient(
+                    "mongodb+srv://stokage15:12345@cluster0.o33im.mongodb.net/xyzdb?retryWrites=true&w=majority",
+                    tlsCAFile=ca
+                )
+                db = client['myFirstDatabase']
+                collection = db['transactions']
+
+                document = {
+                    "date": datetime.now(),
+                    "banque_emetrice": bank,
+                    "banque_debitrice": "CPA",
+                    "montant": montant
+                }
+                
+                insert_doc = collection.insert_one(document)
+                return insert_doc
+            except Exception as e:
+                print(f"Error inserting to MongoDB: {str(e)}")
+                return None
+        return None
+
+    def show_result_window(self, file_path, bank, result, insert_result):
         self.result_window = QWidget()
         self.result_window.setWindowTitle("Résultats de l'Analyse")
         self.result_window.setGeometry(200, 200, 600, 400)
@@ -120,21 +153,18 @@ class ChequeProcessor(QMainWindow):
         title.setStyleSheet("color: #4CAF50;")
         info_layout.addWidget(title, 0, 0, 1, 2)
 
-
-        result = process_cheque(file_path)
-        print(result)
         # Cheque information
         info_data = [
-        ("Banque Émettrice", bank),
-        ("Montant en lettres", result["montant_en_lettres"]),  
-        ("Montant en chiffres", str(result["montant_en_chiffres"])),  # Convert to string
-        ("Langue", result["langue"]),]
-
+            ("Banque Émettrice", bank),
+            ("Montant en lettres", result["montant_en_lettres"]),
+            ("Montant en chiffres", str(result["montant_en_chiffres"])),
+            ("Langue", result["langue"]),
+        ]
 
         for i, (label, value) in enumerate(info_data, start=1):
             label_widget = QLabel(f"{label}:")
             label_widget.setFont(QFont("Arial", 12, QFont.Weight.Bold))
-            value_widget = QLabel(str(value)) 
+            value_widget = QLabel(str(value))
             value_widget.setFont(QFont("Arial", 12))
             info_layout.addWidget(label_widget, i, 0)
             info_layout.addWidget(value_widget, i, 1)
@@ -144,7 +174,16 @@ class ChequeProcessor(QMainWindow):
         close_btn.clicked.connect(self.result_window.close)
         info_layout.addWidget(close_btn, len(info_data) + 1, 0, 1, 2)
 
+        # Show notification
+        self.show_notification(result['similarite'])
+
         self.result_window.show()
+
+    def show_notification(self, similarity):
+        if similarity >= 99:
+            QMessageBox.information(self, "Succès","Traitement réussi avec succès!")
+        else:
+            QMessageBox.warning(self, "Attention", f"Le traitement n'a pas réussi. La similarité est de {similarity:.2f}%")
 
 if __name__ == "__main__":
     app = QApplication(sys.argv)
