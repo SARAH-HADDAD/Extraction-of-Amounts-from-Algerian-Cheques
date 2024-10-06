@@ -1,12 +1,13 @@
 import sys
 import certifi
 import pymongo
+import cv2
 from datetime import datetime
 from PyQt6.QtWidgets import (QApplication, QMainWindow, QWidget, QVBoxLayout, QHBoxLayout, 
                              QPushButton, QLabel, QFileDialog, QFrame, QGridLayout, QMessageBox,
                              QTableWidget, QTableWidgetItem)
-from PyQt6.QtGui import QPixmap, QFont
-from PyQt6.QtCore import Qt
+from PyQt6.QtGui import QPixmap, QFont, QImage
+from PyQt6.QtCore import Qt, QTimer
 from PIL import Image
 from bson.decimal128 import Decimal128
 from decimal import Decimal
@@ -49,6 +50,15 @@ class ChequeProcessor(QMainWindow):
         self.setCentralWidget(self.central_widget)
         self.layout = QHBoxLayout(self.central_widget)
 
+        self.camera = None
+        self.timer = QTimer(self)
+        self.timer.timeout.connect(self.update_frame)
+        
+        # Create capture_btn before calling create_left_panel
+        self.capture_btn = QPushButton("Capturer l'image")
+        self.capture_btn.clicked.connect(self.capture_image)
+        self.capture_btn.setVisible(False)  # Hide the button initially
+
         self.create_left_panel()
         self.create_right_panel()
 
@@ -66,6 +76,14 @@ class ChequeProcessor(QMainWindow):
         upload_btn = QPushButton("Télécharger un chèque")
         upload_btn.clicked.connect(self.upload_file)
         left_layout.addWidget(upload_btn, alignment=Qt.AlignmentFlag.AlignCenter)
+
+        # Camera Button
+        self.camera_btn = QPushButton("Activer la caméra")
+        self.camera_btn.clicked.connect(self.toggle_camera)
+        left_layout.addWidget(self.camera_btn, alignment=Qt.AlignmentFlag.AlignCenter)
+
+        # Capture Button (initially hidden)
+        left_layout.addWidget(self.capture_btn, alignment=Qt.AlignmentFlag.AlignCenter)
 
         # Upload Area
         self.upload_frame = QLabel("Aucun fichier sélectionné")
@@ -290,8 +308,8 @@ class ChequeProcessor(QMainWindow):
             return f"Le solde entre {emettrice} et {debitrice} est zéro."
 
     def show_balance(self):
-        emettrice = "CCP"  # Example bank
-        debitrice = "CPA"  # Example bank
+        emettrice = "CCP"  
+        debitrice = "CPA"  
         result = self.get_bank_balance(emettrice, debitrice)
         self.balance_label.setText(result)
 
@@ -321,8 +339,52 @@ class ChequeProcessor(QMainWindow):
         except Exception as e:
             QMessageBox.critical(self, "Erreur", f"Erreur lors du rafraîchissement des transactions: {str(e)}")
 
+    def toggle_camera(self):
+        if self.camera is None:
+            self.camera = cv2.VideoCapture(0)
+            self.timer.start(30)  # Update every 30 ms
+            self.camera_btn.setText("Désactiver la caméra")
+            self.capture_btn.setVisible(True)
+        else:
+            self.timer.stop()
+            self.camera.release()
+            self.camera = None
+            self.upload_frame.setText("Aucun fichier sélectionné")
+            self.camera_btn.setText("Activer la caméra")
+            self.capture_btn.setVisible(False)
+
+    def update_frame(self):
+        ret, frame = self.camera.read()
+        if ret:
+            frame = cv2.cvtColor(frame, cv2.COLOR_BGR2RGB)
+            h, w, ch = frame.shape
+            bytes_per_line = ch * w
+            q_image = QImage(frame.data, w, h, bytes_per_line, QImage.Format.Format_RGB888)
+            pixmap = QPixmap.fromImage(q_image)
+            pixmap = pixmap.scaled(300, 300, Qt.AspectRatioMode.KeepAspectRatio)
+            self.upload_frame.setPixmap(pixmap)
+
+    def keyPressEvent(self, event):
+        if event.key() == Qt.Key.Key_Space and self.camera is not None:
+            # Capture the current frame
+            ret, frame = self.camera.read()
+            if ret:
+                # Save the captured frame
+                cv2.imwrite("captured_cheque.jpg", frame)
+                self.process_cheque("captured_cheque.jpg")
+                self.toggle_camera()  # Turn off the camera after capturing
+
+    def capture_image(self):
+        if self.camera is not None:
+            ret, frame = self.camera.read()
+            if ret:
+                cv2.imwrite("captured_cheque.jpg", frame)
+                self.process_cheque("captured_cheque.jpg")
+                self.toggle_camera()  # Turn off the camera after capturing
+
 if __name__ == "__main__":
     app = QApplication(sys.argv)
     window = ChequeProcessor()
     window.show()
     sys.exit(app.exec())
+

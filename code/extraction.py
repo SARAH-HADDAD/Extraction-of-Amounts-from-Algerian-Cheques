@@ -118,7 +118,7 @@ def run_yolo_model(image_path):
 
 # Text extraction functions
 def extract_text_and_draw_boxes(image_path):
-    access_token= 'i9cz3vVyX7deJcDOExAfMJYd1drG3Vdo7pCtEzs12R2Kh8EO32usKdT3hLzoV8Km'
+    access_token= 'GXljDq16M7gXp1wZyKKXVgocER4CBrGCjPBgOXGrXrGRBIRrobF15hWWHFFgyTiK'
     url = f"https://backend.scandocflow.com/v1/api/documents/extract?access_token={access_token}"
 
     with open(image_path, 'rb') as image_file:
