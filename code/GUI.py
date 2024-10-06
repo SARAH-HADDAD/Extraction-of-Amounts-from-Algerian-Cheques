@@ -68,17 +68,26 @@ class ChequeProcessor(QMainWindow):
             }
         """)
 
-        self.central_widget = QWidget()
-        self.setCentralWidget(self.central_widget)
-        self.layout = QVBoxLayout(self.central_widget)
-
         self.camera = None
         self.timer = QTimer(self)
         self.timer.timeout.connect(self.update_frame)
-        
+
+        # Create main widget and layout
+        main_widget = QWidget(self)
+        self.main_layout = QVBoxLayout(main_widget)
+        self.setCentralWidget(main_widget)
+
         self.create_header()
         self.create_main_content()
         self.create_footer()
+
+        # Set up a timer to update the balance every 300 seconds
+        self.balance_timer = QTimer(self)
+        self.balance_timer.timeout.connect(self.update_balance)
+        self.balance_timer.start(300000)  # 300 seconds
+
+        # Update balance immediately on startup
+        QTimer.singleShot(0, self.update_balance)
 
     def create_header(self):
         header = QWidget()
@@ -88,12 +97,12 @@ class ChequeProcessor(QMainWindow):
         logo.setFont(QFont("Arial", 24, QFont.Weight.Bold))
         header_layout.addWidget(logo)
 
-        self.balance_label = QLabel("Solde: N/A")
+        self.balance_label = QLabel("Solde: Chargement...")
         self.balance_label.setAlignment(Qt.AlignmentFlag.AlignRight | Qt.AlignmentFlag.AlignVCenter)
         self.balance_label.setFont(QFont("Arial", 16))
         header_layout.addWidget(self.balance_label)
 
-        self.layout.addWidget(header)
+        self.main_layout.addWidget(header)
 
     def create_main_content(self):
         main_content = QSplitter(Qt.Orientation.Horizontal)
@@ -105,7 +114,36 @@ class ChequeProcessor(QMainWindow):
         main_content.addWidget(right_panel)
         main_content.setSizes([400, 800])
 
-        self.layout.addWidget(main_content)
+        self.main_layout.addWidget(main_content)
+
+    def create_footer(self):
+        footer = QWidget()
+        footer_layout = QHBoxLayout(footer)
+
+        refresh_btn = QPushButton("Rafraîchir les transactions")
+        refresh_btn.setIcon(QIcon.fromTheme("view-refresh"))
+        refresh_btn.clicked.connect(self.refresh_transactions)
+        footer_layout.addWidget(refresh_btn, alignment=Qt.AlignmentFlag.AlignCenter)
+
+        self.main_layout.addWidget(footer)
+        
+    def update_balance(self):
+        try:
+            emettrice = "CCP"
+            debitrice = "CPA"
+            balance = self.calculate_bank_balance(emettrice, debitrice)
+            if balance > 0:
+                result = f"Solde: {debitrice} doit {abs(balance):.2f} DA à {emettrice}"
+            elif balance < 0:
+                result = f"Solde: {emettrice} doit {abs(balance):.2f} DA à {debitrice}"
+            else:
+                result = f"Solde: 0.00 DA entre {emettrice} et {debitrice}"
+            self.balance_label.setText(result)
+        except Exception as e:
+            self.balance_label.setText("Erreur lors du chargement du solde")
+            print(f"Error updating balance: {str(e)}")
+
+
 
     def create_left_panel(self):
         left_panel = QWidget()
@@ -177,16 +215,6 @@ class ChequeProcessor(QMainWindow):
 
         return right_panel
 
-    def create_footer(self):
-        footer = QWidget()
-        footer_layout = QHBoxLayout(footer)
-
-        balance_btn = QPushButton("Afficher le solde")
-        balance_btn.setIcon(QIcon.fromTheme("accessories-calculator"))
-        balance_btn.clicked.connect(self.show_balance)
-        footer_layout.addWidget(balance_btn)
-
-        self.layout.addWidget(footer)
 
     def create_transaction_graph(self):
         self.transaction_history_graph.figure.clear()
@@ -249,6 +277,9 @@ class ChequeProcessor(QMainWindow):
 
             # Update the graph
             self.update_transaction_graph(dates, amounts)
+
+            # Update the balance after refreshing transactions
+            self.update_balance()
 
         except Exception as e:
             QMessageBox.critical(self, "Erreur", f"Erreur lors du rafraîchissement des transactions: {str(e)}")
