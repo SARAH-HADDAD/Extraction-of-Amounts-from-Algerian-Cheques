@@ -264,7 +264,7 @@ class ChequeProcessor(QMainWindow):
                 self.transactions_table.setItem(row_position, 0, QTableWidgetItem(transaction_date.strftime("%Y-%m-%d %H:%M")))
                 self.transactions_table.setItem(row_position, 1, QTableWidgetItem(transaction['banque_emetrice']))
                 self.transactions_table.setItem(row_position, 2, QTableWidgetItem(transaction['banque_debitrice']))
-                self.transactions_table.setItem(row_position, 3, QTableWidgetItem(f"{float(transaction['montant']):,.2f} €"))
+                self.transactions_table.setItem(row_position, 3, QTableWidgetItem(f"{float(transaction['montant']):,.2f} DA"))
                 self.transactions_table.setItem(row_position, 4, QTableWidgetItem(str(transaction['_id'])))
 
                 # Collect data for the graph
@@ -291,20 +291,39 @@ class ChequeProcessor(QMainWindow):
             pixmap = QPixmap(file_path)
             pixmap = pixmap.scaled(300, 300, Qt.AspectRatioMode.KeepAspectRatio)
             self.upload_frame.setPixmap(pixmap)
-            
+        
             bank = classify_cheque(file_path)
             result = process_cheque(file_path)
-            
+
+            # Check if the processing was successful
+            success = result.get('similarite', 0) >= 99
+
+            # Insert to the performance collection
+            performance_log = {
+            "date": datetime.now(),
+            "image_path": file_path,
+            "status": "success" if success else "failure"
+            }
+            ca = certifi.where()
+            client = pymongo.MongoClient("mongodb+srv://stokage15:12345@cluster0.o33im.mongodb.net/xyzdb?retryWrites=true&w=majority",tlsCAFile=ca)
+            db = client['myFirstDatabase']
+            collection_performance = db['system_performance']
+            collection_performance.insert_one(performance_log)
+        
             # Insert to MongoDB if similarity is high
-            insert_result = self.insert_to_mongodb(result["montant_en_chiffres"], result["similarite"], bank)
-            
-            # Show result window
-            self.show_result_window(file_path, bank, result, insert_result)
-            
+            if success:
+                insert_result = self.insert_to_mongodb(result["montant_en_chiffres"], result["similarite"], bank)
+                # Show result window
+                self.show_result_window(file_path, bank, result)
+            else:
+                QMessageBox.warning(self, "Processing Failed", "La similarité est trop faible pour accepter le résultat.")
+                self.show_result_window(file_path, bank, result)
+        
             # Refresh transactions
             self.refresh_transactions()
         except Exception as e:
             QMessageBox.critical(self, "Erreur", f"Une erreur est survenue: {str(e)}")
+
 
     def insert_to_mongodb(self, montant, similarity_percentage, bank):
         if similarity_percentage >= 99:
@@ -331,7 +350,7 @@ class ChequeProcessor(QMainWindow):
                 return None
         return None
 
-    def show_result_window(self, file_path, bank, result, insert_result):
+    def show_result_window(self, file_path, bank, result):
         self.result_window = QWidget()
         self.result_window.setWindowTitle("Résultats de l'Analyse")
         self.result_window.setGeometry(200, 200, 600, 400)
