@@ -8,6 +8,8 @@ from PyQt6.QtWidgets import (QApplication, QMainWindow, QWidget, QVBoxLayout, QH
                              QTableWidget, QTableWidgetItem, QSplitter, QTabWidget)
 from PyQt6.QtGui import QPixmap, QFont, QImage, QIcon
 from PyQt6.QtCore import Qt, QTimer
+import pandas as pd
+from matplotlib.ticker import MaxNLocator
 from PIL import Image
 from bson.decimal128 import Decimal128
 from decimal import Decimal
@@ -148,8 +150,6 @@ class ChequeProcessor(QMainWindow):
             self.balance_label.setText("Erreur lors du chargement du solde")
             print(f"Error updating balance: {str(e)}")
 
-
-
     def create_left_panel(self):
         left_panel = QWidget()
         left_layout = QVBoxLayout(left_panel)
@@ -204,26 +204,47 @@ class ChequeProcessor(QMainWindow):
 
         right_panel.addTab(transactions_tab, "Transactions")
 
-        # Graph Tab
+        # Graph Tab for Transaction History
         graph_tab = QWidget()
         graph_layout = QVBoxLayout(graph_tab)
 
         self.transaction_history_graph = FigureCanvas(Figure(figsize=(5, 4)))
         graph_layout.addWidget(self.transaction_history_graph)
-
         right_panel.addTab(graph_tab, "Graphique")
+
+        # Performance Tab for System Performance
+        performance_tab = QWidget()
+        performance_layout = QVBoxLayout(performance_tab)
+
+        self.performance_graph = FigureCanvas(Figure(figsize=(5, 4)))
+        performance_layout.addWidget(self.performance_graph)
+
+        right_panel.addTab(performance_tab, "Performance du Système")
 
         return right_panel
 
+    def create_performance_pie_chart(self, performance_data):
+        """Creates a pie chart showing the ratio of successful and failed transactions."""
+        self.performance_graph.figure.clear()
+        ax = self.performance_graph.figure.add_subplot(111)
 
-    def create_transaction_graph(self):
-        self.transaction_history_graph.figure.clear()
-        ax = self.transaction_history_graph.figure.add_subplot(111)
-        ax.set_title('Historique des Transactions')
-        ax.set_xlabel('Date')
-        ax.set_ylabel('Montant')
-        ax.grid(True, linestyle='--', alpha=0.7)
-        self.transaction_history_graph.draw()
+        # Prepare data for the pie chart
+        df = pd.DataFrame(performance_data)
+        success_count = df[df['status'] == 'success'].shape[0]
+        failure_count = df[df['status'] == 'failure'].shape[0]
+    
+        data = [success_count, failure_count]
+        labels = ['Succès', 'Échecs']
+        colors = ['#66b3ff', '#ff9999']
+
+        # Create pie chart
+        ax.pie(data, labels=labels, autopct='%1.1f%%', startangle=90, colors=colors)
+        ax.axis('equal')  # Equal aspect ratio ensures the pie is drawn as a circle
+        ax.set_title('Répartition des Performances du Système')
+
+        # Redraw the canvas to show the updated pie chart
+        self.performance_graph.figure.tight_layout()
+        self.performance_graph.draw()
 
     def update_transaction_graph(self, dates, amounts):
         ax = self.transaction_history_graph.figure.gca()
@@ -278,8 +299,34 @@ class ChequeProcessor(QMainWindow):
             # Update the graph
             self.update_transaction_graph(dates, amounts)
 
+            # Also refresh the performance graph
+            self.refresh_performance_graph()
+
         except Exception as e:
             QMessageBox.critical(self, "Erreur", f"Erreur lors du rafraîchissement des transactions: {str(e)}")
+            
+    def refresh_performance_graph(self):
+        """Fetch performance data and update the graph."""
+        try:
+            ca = certifi.where()
+            client = pymongo.MongoClient(
+                "mongodb+srv://stokage15:12345@cluster0.o33im.mongodb.net/xyzdb?retryWrites=true&w=majority",
+                tlsCAFile=ca
+            )
+            db = client['myFirstDatabase']
+            collection_performance = db['system_performance']
+
+            # Fetch all performance logs
+            performance_data = list(collection_performance.find())
+            for log in performance_data:
+                log['date'] = log['date'].strftime("%Y-%m-%d")
+            
+            # Update the graph with the fetched data
+            performance_data = self.fetch_performance_data()
+            self.create_performance_pie_chart(performance_data)
+
+        except Exception as e:
+            QMessageBox.critical(self, "Erreur", f"Erreur lors du rafraîchissement de la performance: {str(e)}")
 
     def upload_file(self):
         file_path, _ = QFileDialog.getOpenFileName(self, "Sélectionnez un fichier", "", "Image files (*.png *.jpg *.jpeg *.gif)")
@@ -472,20 +519,6 @@ class ChequeProcessor(QMainWindow):
 
         return balance
 
-    def get_bank_balance(self, emettrice, debitrice):
-        balance = self.calculate_bank_balance(emettrice, debitrice)
-        if balance > 0:
-            return f"{debitrice} doit {abs(balance)} à {emettrice}"
-        elif balance < 0:
-            return f"{emettrice} doit {abs(balance)} à {debitrice}"
-        else:
-            return f"Le solde entre {emettrice} et {debitrice} est zéro."
-
-    def show_balance(self):
-        emettrice = "CCP"  
-        debitrice = "CPA"  
-        result = self.get_bank_balance(emettrice, debitrice)
-        self.balance_label.setText(result)
 
     def toggle_camera(self):
         if self.camera is None:
@@ -512,15 +545,6 @@ class ChequeProcessor(QMainWindow):
             pixmap = pixmap.scaled(300, 300, Qt.AspectRatioMode.KeepAspectRatio)
             self.upload_frame.setPixmap(pixmap)
 
-    def keyPressEvent(self, event):
-        if event.key() == Qt.Key.Key_Space and self.camera is not None:
-            # Capture the current frame
-            ret, frame = self.camera.read()
-            if ret:
-                # Save the captured frame
-                cv2.imwrite("captured_cheque.jpg", frame)
-                self.process_cheque("captured_cheque.jpg")
-                self.toggle_camera()  # Turn off the camera after capturing
 
     def capture_image(self):
         if self.camera is not None:
