@@ -208,11 +208,7 @@ class ChequeProcessor(QMainWindow):
         ax.grid(True, linestyle='--', alpha=0.7)
 
         # Format y-axis labels as currency
-        ax.yaxis.set_major_formatter(plt.FuncFormatter(lambda x, p: f"{x:,.2f} €"))
-
-        # Annotate data points
-        for i, (date, amount) in enumerate(zip(dates, amounts)):
-            ax.annotate(f"{amount:,.2f} €", (date, amount), textcoords="offset points", xytext=(0,10), ha='center')
+        ax.yaxis.set_major_formatter(plt.FuncFormatter(lambda x, p: f"{x:,.2f} DA"))
 
         self.transaction_history_graph.figure.tight_layout()
         self.transaction_history_graph.draw()
