@@ -10,23 +10,22 @@ from PyQt6.QtGui import QPixmap, QFont, QImage, QIcon
 from PyQt6.QtCore import Qt, QTimer
 import pandas as pd
 from matplotlib.ticker import MaxNLocator
-from PIL import Image
+from matplotlib.figure import Figure
+from matplotlib.backends.backend_qt5agg import FigureCanvasQTAgg as FigureCanvas
 from bson.decimal128 import Decimal128
 from decimal import Decimal
-import matplotlib.pyplot as plt
-from matplotlib.backends.backend_qt5agg import FigureCanvasQTAgg as FigureCanvas
-from matplotlib.figure import Figure
 from cheque_classifier import classify_cheque
 from extraction import process_cheque
+import matplotlib.pyplot as plt
 
 class ChequeProcessor(QMainWindow):
     def __init__(self):
         super().__init__()
-        self.setWindowTitle("Processeur de Chèques")
+        self.setWindowTitle("Tableau de Bord - Processeur de Chèques")
         self.setGeometry(100, 100, 1200, 800)
         self.setStyleSheet("""
             QMainWindow, QWidget {
-                background-color: #f5f5f5;
+                background-color: #f0f0f0;
                 color: #333;
             }
             QPushButton {
@@ -41,66 +40,47 @@ class ChequeProcessor(QMainWindow):
             QPushButton:hover {
                 background-color: #45a049;
             }
-            QTableWidget {
-                background-color: white;
-                border: 1px solid #ddd;
-                border-radius: 5px;
-            }
-            QTableWidget::item {
-                padding: 5px;
-            }
             QLabel {
                 font-size: 14px;
             }
-            QTabWidget::pane {
+            QFrame {
+                background-color: white;
                 border: 1px solid #ddd;
                 border-radius: 5px;
-                background-color: white;
-            }
-            QTabBar::tab {
-                background-color: #e0e0e0;
-                padding: 10px 20px;
-                margin-right: 2px;
-                border-top-left-radius: 5px;
-                border-top-right-radius: 5px;
-            }
-            QTabBar::tab:selected {
-                background-color: white;
-                border-bottom: 2px solid #4CAF50;
             }
         """)
+
+        self.central_widget = QWidget()
+        self.setCentralWidget(self.central_widget)
+        self.main_layout = QVBoxLayout(self.central_widget)
+
+        self.create_header()
+        self.create_dashboard()
+        self.create_footer()
 
         self.camera = None
         self.timer = QTimer(self)
         self.timer.timeout.connect(self.update_frame)
 
-        # Create main widget and layout
-        main_widget = QWidget(self)
-        self.main_layout = QVBoxLayout(main_widget)
-        self.setCentralWidget(main_widget)
-
-        self.create_header()
-        self.create_main_content()
-        self.create_footer()
-
-        # Set up a timer to update the balance every 300 seconds
         self.balance_timer = QTimer(self)
         self.balance_timer.timeout.connect(self.update_balance)
         self.balance_timer.start(300000)  # 300 seconds
 
-        # Update balance, transactions, and graph immediately on startup
         QTimer.singleShot(0, self.initial_update)
 
     def initial_update(self):
         self.update_balance()
         self.refresh_transactions()
 
+    def refresh_dashboard(self):
+        self.update_transaction_graph()
+        self.refresh_performance_graph()
 
     def create_header(self):
         header = QWidget()
         header_layout = QHBoxLayout(header)
 
-        logo = QLabel("Processeur de Chèques")
+        logo = QLabel("Tableau de Bord - Processeur de Chèques")
         logo.setFont(QFont("Arial", 24, QFont.Weight.Bold))
         header_layout.addWidget(logo)
 
@@ -111,6 +91,95 @@ class ChequeProcessor(QMainWindow):
 
         self.main_layout.addWidget(header)
 
+    def create_dashboard(self):
+        dashboard = QWidget()
+        dashboard_layout = QGridLayout(dashboard)
+
+        # Transaction History Graph
+        self.transaction_history_graph = self.create_graph_widget("Historique des Transactions")
+        dashboard_layout.addWidget(self.transaction_history_graph, 0, 0)
+
+        # Performance Pie Chart
+        self.performance_graph = self.create_graph_widget("Performance du Système")
+        dashboard_layout.addWidget(self.performance_graph, 0, 1)
+
+        # Cheque Upload Area
+        upload_area = self.create_upload_area()
+        dashboard_layout.addWidget(upload_area, 1, 0, 1, 2)
+
+        self.main_layout.addWidget(dashboard)
+
+    def create_graph_widget(self, title):
+        frame = QFrame()
+        layout = QVBoxLayout(frame)
+        
+        title_label = QLabel(title)
+        title_label.setFont(QFont("Arial", 16, QFont.Weight.Bold))
+        layout.addWidget(title_label)
+
+        graph = FigureCanvas(Figure(figsize=(5, 4)))
+        layout.addWidget(graph)
+
+        return frame
+
+    def create_table_widget(self, title):
+        frame = QFrame()
+        layout = QVBoxLayout(frame)
+        
+        title_label = QLabel(title)
+        title_label.setFont(QFont("Arial", 16, QFont.Weight.Bold))
+        layout.addWidget(title_label)
+
+        table = QTableWidget()
+        table.setColumnCount(5)
+        table.setHorizontalHeaderLabels(["Date", "Banque Émettrice", "Banque Débitrice", "Montant", "ID"])
+        table.horizontalHeader().setStretchLastSection(True)
+        layout.addWidget(table)
+
+        return frame
+
+
+    def create_upload_area(self):
+        frame = QFrame()
+        layout = QVBoxLayout(frame)
+
+        title_label = QLabel("Téléchargement de Chèque")
+        title_label.setFont(QFont("Arial", 16, QFont.Weight.Bold))
+        layout.addWidget(title_label)
+
+        self.upload_frame = QLabel("Aucun fichier sélectionné")
+        self.upload_frame.setAlignment(Qt.AlignmentFlag.AlignCenter)
+        self.upload_frame.setStyleSheet("""
+            background-color: white;
+            border: 2px dashed #4CAF50;
+            border-radius: 5px;
+            padding: 20px;
+            min-height: 200px;
+        """)
+        layout.addWidget(self.upload_frame)
+
+        buttons_layout = QHBoxLayout()
+        
+        upload_btn = QPushButton("Télécharger un chèque")
+        upload_btn.setIcon(QIcon.fromTheme("document-open"))
+        upload_btn.clicked.connect(self.upload_file)
+        buttons_layout.addWidget(upload_btn)
+
+        self.camera_btn = QPushButton("Activer la caméra")
+        self.camera_btn.setIcon(QIcon.fromTheme("camera-photo"))
+        self.camera_btn.clicked.connect(self.toggle_camera)
+        buttons_layout.addWidget(self.camera_btn)
+
+        self.capture_btn = QPushButton("Capturer l'image")
+        self.capture_btn.setIcon(QIcon.fromTheme("camera-photo"))
+        self.capture_btn.clicked.connect(self.capture_image)
+        self.capture_btn.setVisible(False)
+        buttons_layout.addWidget(self.capture_btn)
+
+        layout.addLayout(buttons_layout)
+
+        return frame
+    
     def create_main_content(self):
         main_content = QSplitter(Qt.Orientation.Horizontal)
         
@@ -127,9 +196,9 @@ class ChequeProcessor(QMainWindow):
         footer = QWidget()
         footer_layout = QHBoxLayout(footer)
 
-        refresh_btn = QPushButton("Rafraîchir les transactions")
+        refresh_btn = QPushButton("Rafraîchir le tableau de bord")
         refresh_btn.setIcon(QIcon.fromTheme("view-refresh"))
-        refresh_btn.clicked.connect(self.refresh_transactions)
+        refresh_btn.clicked.connect(self.refresh_dashboard)
         footer_layout.addWidget(refresh_btn, alignment=Qt.AlignmentFlag.AlignCenter)
 
         self.main_layout.addWidget(footer)
@@ -223,44 +292,47 @@ class ChequeProcessor(QMainWindow):
 
         return right_panel
 
-    def create_performance_pie_chart(self, performance_data):
-        """Creates a pie chart showing the ratio of successful and failed transactions."""
-        self.performance_graph.figure.clear()
-        ax = self.performance_graph.figure.add_subplot(111)
 
-        # Prepare data for the pie chart
-        df = pd.DataFrame(performance_data)
-        success_count = df[df['status'] == 'success'].shape[0]
-        failure_count = df[df['status'] == 'failure'].shape[0]
-    
-        data = [success_count, failure_count]
-        labels = ['Succès', 'Échecs']
-        colors = ['#66b3ff', '#ff9999']
+    def update_transaction_graph(self):
+        try:
+            ca = certifi.where()
+            client = pymongo.MongoClient(
+                "mongodb+srv://stokage15:12345@cluster0.o33im.mongodb.net/xyzdb?retryWrites=true&w=majority",
+                tlsCAFile=ca
+            )
+            db = client['myFirstDatabase']
+            collection = db['transactions']
 
-        # Create pie chart
-        ax.pie(data, labels=labels, autopct='%1.1f%%', startangle=90, colors=colors)
-        ax.axis('equal')  # Equal aspect ratio ensures the pie is drawn as a circle
-        ax.set_title('Répartition des Performances du Système')
+            # Fetch the most recent transactions (limit to 10 for example)
+            recent_transactions = list(collection.find().sort("date", -1).limit(10))
 
-        # Redraw the canvas to show the updated pie chart
-        self.performance_graph.figure.tight_layout()
-        self.performance_graph.draw()
+            dates = []
+            amounts = []
+            for transaction in recent_transactions:
+                dates.append(transaction['date'])
+                amounts.append(float(transaction['montant']))
 
-    def update_transaction_graph(self, dates, amounts):
-        ax = self.transaction_history_graph.figure.gca()
-        ax.clear()
-        ax.plot(dates, amounts, marker='o', linestyle='-', color='#4CAF50')
-        ax.set_title('Historique des Transactions')
-        ax.set_xlabel('Date')
-        ax.set_ylabel('Montant')
-        ax.tick_params(axis='x', rotation=45)
-        ax.grid(True, linestyle='--', alpha=0.7)
+            # Reverse the order for chronological display
+            dates.reverse()
+            amounts.reverse()
 
-        # Format y-axis labels as currency
-        ax.yaxis.set_major_formatter(plt.FuncFormatter(lambda x, p: f"{x:,.2f} DA"))
+            ax = self.transaction_history_graph.findChild(FigureCanvas).figure.gca()
+            ax.clear()
+            ax.plot(dates, amounts, marker='o', linestyle='-', color='#4CAF50')
+            ax.set_title('Historique des Transactions')
+            ax.set_xlabel('Date')
+            ax.set_ylabel('Montant')
+            ax.tick_params(axis='x', rotation=45)
+            ax.grid(True, linestyle='--', alpha=0.7)
 
-        self.transaction_history_graph.figure.tight_layout()
-        self.transaction_history_graph.draw()
+            # Format y-axis labels as currency
+            ax.yaxis.set_major_formatter(plt.FuncFormatter(lambda x, p: f"{x:,.2f} DA"))
+
+            self.transaction_history_graph.findChild(FigureCanvas).figure.tight_layout()
+            self.transaction_history_graph.findChild(FigureCanvas).draw()
+
+        except Exception as e:
+            print(f"Error updating transaction graph: {str(e)}")
 
     def refresh_transactions(self):
         try:
@@ -275,38 +347,21 @@ class ChequeProcessor(QMainWindow):
             # Fetch the most recent transactions (limit to 10 for example)
             recent_transactions = list(collection.find().sort("date", -1).limit(10))
 
-            self.transactions_table.setRowCount(0)
-            dates = []
-            amounts = []
+            table = self.transactions_table.findChild(QTableWidget)
+            table.setRowCount(0)
             for transaction in recent_transactions:
-                row_position = self.transactions_table.rowCount()
-                self.transactions_table.insertRow(row_position)
-                transaction_date = transaction['date']
-                self.transactions_table.setItem(row_position, 0, QTableWidgetItem(transaction_date.strftime("%Y-%m-%d %H:%M")))
-                self.transactions_table.setItem(row_position, 1, QTableWidgetItem(transaction['banque_emetrice']))
-                self.transactions_table.setItem(row_position, 2, QTableWidgetItem(transaction['banque_debitrice']))
-                self.transactions_table.setItem(row_position, 3, QTableWidgetItem(f"{float(transaction['montant']):,.2f} DA"))
-                self.transactions_table.setItem(row_position, 4, QTableWidgetItem(str(transaction['_id'])))
-
-                # Collect data for the graph
-                dates.append(transaction_date)
-                amounts.append(float(transaction['montant']))
-
-            # Reverse the order of dates and amounts for chronological display
-            dates.reverse()
-            amounts.reverse()
-
-            # Update the graph
-            self.update_transaction_graph(dates, amounts)
-
-            # Also refresh the performance graph
-            self.refresh_performance_graph()
+                row_position = table.rowCount()
+                table.insertRow(row_position)
+                table.setItem(row_position, 0, QTableWidgetItem(transaction['date'].strftime("%Y-%m-%d %H:%M")))
+                table.setItem(row_position, 1, QTableWidgetItem(transaction['banque_emetrice']))
+                table.setItem(row_position, 2, QTableWidgetItem(transaction['banque_debitrice']))
+                table.setItem(row_position, 3, QTableWidgetItem(f"{float(transaction['montant']):,.2f} DA"))
+                table.setItem(row_position, 4, QTableWidgetItem(str(transaction['_id'])))
 
         except Exception as e:
-            QMessageBox.critical(self, "Erreur", f"Erreur lors du rafraîchissement des transactions: {str(e)}")
+            print(f"Error refreshing transactions: {str(e)}")
             
     def refresh_performance_graph(self):
-        """Fetch performance data and update the graph."""
         try:
             ca = certifi.where()
             client = pymongo.MongoClient(
@@ -318,15 +373,83 @@ class ChequeProcessor(QMainWindow):
 
             # Fetch all performance logs
             performance_data = list(collection_performance.find())
-            for log in performance_data:
-                log['date'] = log['date'].strftime("%Y-%m-%d")
             
-            # Update the graph with the fetched data
-            performance_data = self.fetch_performance_data()
-            self.create_performance_pie_chart(performance_data)
+            if performance_data:
+                success_count = sum(1 for log in performance_data if log['status'] == 'success')
+                fail_count = sum(1 for log in performance_data if log['status'] == 'failure')
+
+                total = success_count + fail_count
+                if total > 0:
+                    success_percentage = (success_count / total) * 100
+                    fail_percentage = (fail_count / total) * 100
+
+                    ax = self.performance_graph.findChild(FigureCanvas).figure.gca()
+                    ax.clear()
+
+                    labels = ['Succès', 'Échec']
+                    sizes = [success_percentage, fail_percentage]
+                    colors = ['#4CAF50', '#FF5252']
+
+                    wedges, texts, autotexts = ax.pie(sizes, labels=labels, colors=colors, autopct='%1.1f%%',
+                                                      startangle=90, pctdistance=0.85)
+                    
+                    # Customize text properties
+                    for autotext in autotexts:
+                        autotext.set_color('white')
+                        autotext.set_fontweight('bold')
+                        autotext.set_fontsize(10)
+
+                    for text in texts:
+                        text.set_fontsize(12)
+                    
+                    ax.axis('equal')
+                    ax.set_title("Performance du Système", fontsize=16, fontweight='bold', pad=20)
+
+                    self.performance_graph.findChild(FigureCanvas).figure.tight_layout()
+                    self.performance_graph.findChild(FigureCanvas).draw()
+                else:
+                    self.performance_graph.findChild(FigureCanvas).figure.clear()
+                    self.performance_graph.findChild(FigureCanvas).draw()
+            else:
+                self.performance_graph.findChild(FigureCanvas).figure.clear()
+                self.performance_graph.findChild(FigureCanvas).draw()
 
         except Exception as e:
-            QMessageBox.critical(self, "Erreur", f"Erreur lors du rafraîchissement de la performance: {str(e)}")
+            print(f"Error updating performance graph: {str(e)}")
+
+    def create_performance_pie_chart(self, success_percentage, fail_percentage):
+        """Create and display a circular pie chart showing system success and failure rates."""
+        self.performance_graph.figure.clear()
+        ax = self.performance_graph.figure.add_subplot(111)
+
+        labels = ['Succès', 'Échec']
+        sizes = [success_percentage, fail_percentage]
+        colors = ['#4CAF50', '#FF5252']  # Green for success, Red for failure
+
+        wedges, texts, autotexts = ax.pie(sizes, labels=labels, colors=colors, autopct='%1.1f%%',
+                                          startangle=90, pctdistance=0.85, 
+                                          wedgeprops=dict(width=0.5, edgecolor='white'))
+        
+        # Customize text properties
+        for autotext in autotexts:
+            autotext.set_color('white')
+            autotext.set_fontweight('bold')
+            autotext.set_fontsize(10)
+
+        for text in texts:
+            text.set_fontsize(12)
+        
+        # Equal aspect ratio ensures that pie is drawn as a circle
+        ax.axis('equal')
+        
+        # Add title
+        ax.set_title("Performance du Système", fontsize=16, fontweight='bold', pad=20)
+
+        # Add legend
+        ax.legend(wedges, labels, title="Statut", loc="center left", bbox_to_anchor=(1, 0, 0.5, 1))
+
+        self.performance_graph.figure.tight_layout()
+        self.performance_graph.draw()
 
     def upload_file(self):
         file_path, _ = QFileDialog.getOpenFileName(self, "Sélectionnez un fichier", "", "Image files (*.png *.jpg *.jpeg *.gif)")
@@ -473,7 +596,6 @@ class ChequeProcessor(QMainWindow):
         else:
             QMessageBox.warning(self, "Attention", f"Le traitement n'a pas réussi. La similarité est de {similarity:.2f}%")
 
-
     def calculate_bank_balance(self, emettrice, debitrice):
         ca = certifi.where()
         client = pymongo.MongoClient(
@@ -519,7 +641,6 @@ class ChequeProcessor(QMainWindow):
 
         return balance
 
-
     def toggle_camera(self):
         if self.camera is None:
             self.camera = cv2.VideoCapture(0)
@@ -544,7 +665,6 @@ class ChequeProcessor(QMainWindow):
             pixmap = QPixmap.fromImage(q_image)
             pixmap = pixmap.scaled(300, 300, Qt.AspectRatioMode.KeepAspectRatio)
             self.upload_frame.setPixmap(pixmap)
-
 
     def capture_image(self):
         if self.camera is not None:
