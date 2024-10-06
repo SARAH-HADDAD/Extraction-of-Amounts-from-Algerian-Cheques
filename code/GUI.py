@@ -86,8 +86,13 @@ class ChequeProcessor(QMainWindow):
         self.balance_timer.timeout.connect(self.update_balance)
         self.balance_timer.start(300000)  # 300 seconds
 
-        # Update balance immediately on startup
-        QTimer.singleShot(0, self.update_balance)
+        # Update balance, transactions, and graph immediately on startup
+        QTimer.singleShot(0, self.initial_update)
+
+    def initial_update(self):
+        self.update_balance()
+        self.refresh_transactions()
+
 
     def create_header(self):
         header = QWidget()
@@ -126,7 +131,7 @@ class ChequeProcessor(QMainWindow):
         footer_layout.addWidget(refresh_btn, alignment=Qt.AlignmentFlag.AlignCenter)
 
         self.main_layout.addWidget(footer)
-        
+
     def update_balance(self):
         try:
             emettrice = "CCP"
@@ -196,11 +201,6 @@ class ChequeProcessor(QMainWindow):
         self.transactions_table.setHorizontalHeaderLabels(["Date", "Banque Émettrice", "Banque Débitrice", "Montant", "ID"])
         self.transactions_table.horizontalHeader().setStretchLastSection(True)
         transactions_layout.addWidget(self.transactions_table)
-
-        refresh_btn = QPushButton("Rafraîchir les transactions")
-        refresh_btn.setIcon(QIcon.fromTheme("view-refresh"))
-        refresh_btn.clicked.connect(self.refresh_transactions)
-        transactions_layout.addWidget(refresh_btn, alignment=Qt.AlignmentFlag.AlignCenter)
 
         right_panel.addTab(transactions_tab, "Transactions")
 
@@ -277,9 +277,6 @@ class ChequeProcessor(QMainWindow):
 
             # Update the graph
             self.update_transaction_graph(dates, amounts)
-
-            # Update the balance after refreshing transactions
-            self.update_balance()
 
         except Exception as e:
             QMessageBox.critical(self, "Erreur", f"Erreur lors du rafraîchissement des transactions: {str(e)}")
