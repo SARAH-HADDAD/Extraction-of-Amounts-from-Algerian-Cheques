@@ -5,14 +5,15 @@ import cv2
 from datetime import datetime
 from PyQt6.QtWidgets import (QApplication, QMainWindow, QWidget, QVBoxLayout, QHBoxLayout, 
                              QPushButton, QLabel, QFileDialog, QFrame, QGridLayout, QMessageBox,
-                             QTableWidget, QTableWidgetItem)
-from PyQt6.QtGui import QPixmap, QFont, QImage
+                             QTableWidget, QTableWidgetItem, QSplitter, QTabWidget)
+from PyQt6.QtGui import QPixmap, QFont, QImage, QIcon
 from PyQt6.QtCore import Qt, QTimer
 from PIL import Image
 from bson.decimal128 import Decimal128
 from decimal import Decimal
-
-# You'll need to implement or import these functions
+import matplotlib.pyplot as plt
+from matplotlib.backends.backend_qt5agg import FigureCanvasQTAgg as FigureCanvas
+from matplotlib.figure import Figure
 from cheque_classifier import classify_cheque
 from extraction import process_cheque
 
@@ -20,11 +21,11 @@ class ChequeProcessor(QMainWindow):
     def __init__(self):
         super().__init__()
         self.setWindowTitle("Processeur de Chèques")
-        self.setGeometry(100, 100, 800, 600)
+        self.setGeometry(100, 100, 1200, 800)
         self.setStyleSheet("""
             QMainWindow, QWidget {
-                background-color: #f0fff0;
-                color: #006400;
+                background-color: #f5f5f5;
+                color: #333;
             }
             QPushButton {
                 background-color: #4CAF50;
@@ -33,57 +34,82 @@ class ChequeProcessor(QMainWindow):
                 padding: 10px 20px;
                 font-size: 14px;
                 border-radius: 5px;
+                min-width: 150px;
             }
             QPushButton:hover {
                 background-color: #45a049;
             }
             QTableWidget {
                 background-color: white;
-                border: 1px solid #4CAF50;
+                border: 1px solid #ddd;
+                border-radius: 5px;
             }
             QTableWidget::item {
                 padding: 5px;
+            }
+            QLabel {
+                font-size: 14px;
+            }
+            QTabWidget::pane {
+                border: 1px solid #ddd;
+                border-radius: 5px;
+                background-color: white;
+            }
+            QTabBar::tab {
+                background-color: #e0e0e0;
+                padding: 10px 20px;
+                margin-right: 2px;
+                border-top-left-radius: 5px;
+                border-top-right-radius: 5px;
+            }
+            QTabBar::tab:selected {
+                background-color: white;
+                border-bottom: 2px solid #4CAF50;
             }
         """)
 
         self.central_widget = QWidget()
         self.setCentralWidget(self.central_widget)
-        self.layout = QHBoxLayout(self.central_widget)
+        self.layout = QVBoxLayout(self.central_widget)
 
         self.camera = None
         self.timer = QTimer(self)
         self.timer.timeout.connect(self.update_frame)
         
-        # Create capture_btn before calling create_left_panel
-        self.capture_btn = QPushButton("Capturer l'image")
-        self.capture_btn.clicked.connect(self.capture_image)
-        self.capture_btn.setVisible(False)  # Hide the button initially
+        self.create_header()
+        self.create_main_content()
+        self.create_footer()
 
-        self.create_left_panel()
-        self.create_right_panel()
+    def create_header(self):
+        header = QWidget()
+        header_layout = QHBoxLayout(header)
+
+        logo = QLabel("Processeur de Chèques")
+        logo.setFont(QFont("Arial", 24, QFont.Weight.Bold))
+        header_layout.addWidget(logo)
+
+        self.balance_label = QLabel("Solde: N/A")
+        self.balance_label.setAlignment(Qt.AlignmentFlag.AlignRight | Qt.AlignmentFlag.AlignVCenter)
+        self.balance_label.setFont(QFont("Arial", 16))
+        header_layout.addWidget(self.balance_label)
+
+        self.layout.addWidget(header)
+
+    def create_main_content(self):
+        main_content = QSplitter(Qt.Orientation.Horizontal)
+        
+        left_panel = self.create_left_panel()
+        right_panel = self.create_right_panel()
+
+        main_content.addWidget(left_panel)
+        main_content.addWidget(right_panel)
+        main_content.setSizes([400, 800])
+
+        self.layout.addWidget(main_content)
 
     def create_left_panel(self):
         left_panel = QWidget()
         left_layout = QVBoxLayout(left_panel)
-
-        # Title
-        title = QLabel("Processeur de Chèques")
-        title.setFont(QFont("Arial", 20, QFont.Weight.Bold))
-        title.setAlignment(Qt.AlignmentFlag.AlignCenter)
-        left_layout.addWidget(title)
-
-        # Upload Button
-        upload_btn = QPushButton("Télécharger un chèque")
-        upload_btn.clicked.connect(self.upload_file)
-        left_layout.addWidget(upload_btn, alignment=Qt.AlignmentFlag.AlignCenter)
-
-        # Camera Button
-        self.camera_btn = QPushButton("Activer la caméra")
-        self.camera_btn.clicked.connect(self.toggle_camera)
-        left_layout.addWidget(self.camera_btn, alignment=Qt.AlignmentFlag.AlignCenter)
-
-        # Capture Button (initially hidden)
-        left_layout.addWidget(self.capture_btn, alignment=Qt.AlignmentFlag.AlignCenter)
 
         # Upload Area
         self.upload_frame = QLabel("Aucun fichier sélectionné")
@@ -93,39 +119,143 @@ class ChequeProcessor(QMainWindow):
             border: 2px dashed #4CAF50;
             border-radius: 5px;
             padding: 20px;
+            min-height: 300px;
         """)
         left_layout.addWidget(self.upload_frame)
 
-        # Balance Button
-        balance_btn = QPushButton("Afficher le solde")
-        balance_btn.clicked.connect(self.show_balance)
-        left_layout.addWidget(balance_btn, alignment=Qt.AlignmentFlag.AlignCenter)
+        # Buttons
+        buttons_layout = QHBoxLayout()
+        
+        upload_btn = QPushButton("Télécharger un chèque")
+        upload_btn.setIcon(QIcon.fromTheme("document-open"))
+        upload_btn.clicked.connect(self.upload_file)
+        buttons_layout.addWidget(upload_btn)
 
-        # Balance Display
-        self.balance_label = QLabel("Solde: N/A")
-        self.balance_label.setAlignment(Qt.AlignmentFlag.AlignCenter)
-        self.balance_label.setFont(QFont("Arial", 14, QFont.Weight.Bold))
-        left_layout.addWidget(self.balance_label)
+        self.camera_btn = QPushButton("Activer la caméra")
+        self.camera_btn.setIcon(QIcon.fromTheme("camera-photo"))
+        self.camera_btn.clicked.connect(self.toggle_camera)
+        buttons_layout.addWidget(self.camera_btn)
 
-        self.layout.addWidget(left_panel)
+        self.capture_btn = QPushButton("Capturer l'image")
+        self.capture_btn.setIcon(QIcon.fromTheme("camera-photo"))
+        self.capture_btn.clicked.connect(self.capture_image)
+        self.capture_btn.setVisible(False)
+        buttons_layout.addWidget(self.capture_btn)
+
+        left_layout.addLayout(buttons_layout)
+
+        return left_panel
 
     def create_right_panel(self):
-        right_panel = QWidget()
-        right_layout = QVBoxLayout(right_panel)
+        right_panel = QTabWidget()
 
-        # Recent Transactions Table
+        # Transactions Tab
+        transactions_tab = QWidget()
+        transactions_layout = QVBoxLayout(transactions_tab)
+
         self.transactions_table = QTableWidget()
         self.transactions_table.setColumnCount(5)
         self.transactions_table.setHorizontalHeaderLabels(["Date", "Banque Émettrice", "Banque Débitrice", "Montant", "ID"])
         self.transactions_table.horizontalHeader().setStretchLastSection(True)
-        right_layout.addWidget(self.transactions_table)
+        transactions_layout.addWidget(self.transactions_table)
 
-        # Refresh Button
         refresh_btn = QPushButton("Rafraîchir les transactions")
+        refresh_btn.setIcon(QIcon.fromTheme("view-refresh"))
         refresh_btn.clicked.connect(self.refresh_transactions)
-        right_layout.addWidget(refresh_btn, alignment=Qt.AlignmentFlag.AlignCenter)
+        transactions_layout.addWidget(refresh_btn, alignment=Qt.AlignmentFlag.AlignCenter)
 
-        self.layout.addWidget(right_panel)
+        right_panel.addTab(transactions_tab, "Transactions")
+
+        # Graph Tab
+        graph_tab = QWidget()
+        graph_layout = QVBoxLayout(graph_tab)
+
+        self.transaction_history_graph = FigureCanvas(Figure(figsize=(5, 4)))
+        graph_layout.addWidget(self.transaction_history_graph)
+
+        right_panel.addTab(graph_tab, "Graphique")
+
+        return right_panel
+
+    def create_footer(self):
+        footer = QWidget()
+        footer_layout = QHBoxLayout(footer)
+
+        balance_btn = QPushButton("Afficher le solde")
+        balance_btn.setIcon(QIcon.fromTheme("accessories-calculator"))
+        balance_btn.clicked.connect(self.show_balance)
+        footer_layout.addWidget(balance_btn)
+
+        self.layout.addWidget(footer)
+
+    def create_transaction_graph(self):
+        self.transaction_history_graph.figure.clear()
+        ax = self.transaction_history_graph.figure.add_subplot(111)
+        ax.set_title('Historique des Transactions')
+        ax.set_xlabel('Date')
+        ax.set_ylabel('Montant')
+        ax.grid(True, linestyle='--', alpha=0.7)
+        self.transaction_history_graph.draw()
+
+    def update_transaction_graph(self, dates, amounts):
+        ax = self.transaction_history_graph.figure.gca()
+        ax.clear()
+        ax.plot(dates, amounts, marker='o', linestyle='-', color='#4CAF50')
+        ax.set_title('Historique des Transactions')
+        ax.set_xlabel('Date')
+        ax.set_ylabel('Montant')
+        ax.tick_params(axis='x', rotation=45)
+        ax.grid(True, linestyle='--', alpha=0.7)
+
+        # Format y-axis labels as currency
+        ax.yaxis.set_major_formatter(plt.FuncFormatter(lambda x, p: f"{x:,.2f} €"))
+
+        # Annotate data points
+        for i, (date, amount) in enumerate(zip(dates, amounts)):
+            ax.annotate(f"{amount:,.2f} €", (date, amount), textcoords="offset points", xytext=(0,10), ha='center')
+
+        self.transaction_history_graph.figure.tight_layout()
+        self.transaction_history_graph.draw()
+
+    def refresh_transactions(self):
+        try:
+            ca = certifi.where()
+            client = pymongo.MongoClient(
+                "mongodb+srv://stokage15:12345@cluster0.o33im.mongodb.net/xyzdb?retryWrites=true&w=majority",
+                tlsCAFile=ca
+            )
+            db = client['myFirstDatabase']
+            collection = db['transactions']
+
+            # Fetch the most recent transactions (limit to 10 for example)
+            recent_transactions = list(collection.find().sort("date", -1).limit(10))
+
+            self.transactions_table.setRowCount(0)
+            dates = []
+            amounts = []
+            for transaction in recent_transactions:
+                row_position = self.transactions_table.rowCount()
+                self.transactions_table.insertRow(row_position)
+                transaction_date = transaction['date']
+                self.transactions_table.setItem(row_position, 0, QTableWidgetItem(transaction_date.strftime("%Y-%m-%d %H:%M")))
+                self.transactions_table.setItem(row_position, 1, QTableWidgetItem(transaction['banque_emetrice']))
+                self.transactions_table.setItem(row_position, 2, QTableWidgetItem(transaction['banque_debitrice']))
+                self.transactions_table.setItem(row_position, 3, QTableWidgetItem(f"{float(transaction['montant']):,.2f} €"))
+                self.transactions_table.setItem(row_position, 4, QTableWidgetItem(str(transaction['_id'])))
+
+                # Collect data for the graph
+                dates.append(transaction_date)
+                amounts.append(float(transaction['montant']))
+
+            # Reverse the order of dates and amounts for chronological display
+            dates.reverse()
+            amounts.reverse()
+
+            # Update the graph
+            self.update_transaction_graph(dates, amounts)
+
+        except Exception as e:
+            QMessageBox.critical(self, "Erreur", f"Erreur lors du rafraîchissement des transactions: {str(e)}")
 
     def upload_file(self):
         file_path, _ = QFileDialog.getOpenFileName(self, "Sélectionnez un fichier", "", "Image files (*.png *.jpg *.jpeg *.gif)")
@@ -253,6 +383,7 @@ class ChequeProcessor(QMainWindow):
         else:
             QMessageBox.warning(self, "Attention", f"Le traitement n'a pas réussi. La similarité est de {similarity:.2f}%")
 
+
     def calculate_bank_balance(self, emettrice, debitrice):
         ca = certifi.where()
         client = pymongo.MongoClient(
@@ -312,32 +443,6 @@ class ChequeProcessor(QMainWindow):
         debitrice = "CPA"  
         result = self.get_bank_balance(emettrice, debitrice)
         self.balance_label.setText(result)
-
-    def refresh_transactions(self):
-        try:
-            ca = certifi.where()
-            client = pymongo.MongoClient(
-                "mongodb+srv://stokage15:12345@cluster0.o33im.mongodb.net/xyzdb?retryWrites=true&w=majority",
-                tlsCAFile=ca
-            )
-            db = client['myFirstDatabase']
-            collection = db['transactions']
-
-            # Fetch the most recent transactions (limit to 10 for example)
-            recent_transactions = collection.find().sort("date", -1).limit(10)
-
-            self.transactions_table.setRowCount(0)
-            for transaction in recent_transactions:
-                row_position = self.transactions_table.rowCount()
-                self.transactions_table.insertRow(row_position)
-                self.transactions_table.setItem(row_position, 0, QTableWidgetItem(str(transaction['date'])))
-                self.transactions_table.setItem(row_position, 1, QTableWidgetItem(transaction['banque_emetrice']))
-                self.transactions_table.setItem(row_position, 2, QTableWidgetItem(transaction['banque_debitrice']))
-                self.transactions_table.setItem(row_position, 3, QTableWidgetItem(str(transaction['montant'])))
-                self.transactions_table.setItem(row_position, 4, QTableWidgetItem(str(transaction['_id'])))
-
-        except Exception as e:
-            QMessageBox.critical(self, "Erreur", f"Erreur lors du rafraîchissement des transactions: {str(e)}")
 
     def toggle_camera(self):
         if self.camera is None:
