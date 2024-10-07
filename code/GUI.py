@@ -2,7 +2,7 @@ import sys
 import certifi
 import pymongo
 import cv2
-from datetime import datetime
+from datetime import datetime, timedelta
 from PyQt6.QtWidgets import (QApplication, QMainWindow, QWidget, QVBoxLayout, QHBoxLayout, 
                              QPushButton, QLabel, QFileDialog, QFrame, QGridLayout, QMessageBox,
                              QTableWidget, QTableWidgetItem, QSplitter, QTabWidget)
@@ -70,6 +70,7 @@ class ChequeProcessor(QMainWindow):
     def refresh_dashboard(self):
         self.update_transaction_graph()
         self.refresh_performance_graph()
+        self.update_cheque_count_graph()
 
     def create_header(self):
         header = QWidget()
@@ -85,19 +86,127 @@ class ChequeProcessor(QMainWindow):
         dashboard = QWidget()
         dashboard_layout = QGridLayout(dashboard)
 
-        # Transaction History Graph
+        # Top row: Two graphs
         self.transaction_history_graph = self.create_graph_widget("Historique des Transactions")
         dashboard_layout.addWidget(self.transaction_history_graph, 0, 0)
 
-        # Performance Pie Chart
         self.performance_graph = self.create_graph_widget("Performance du Système")
         dashboard_layout.addWidget(self.performance_graph, 0, 1)
 
-        # Cheque Upload Area
-        upload_area = self.create_upload_area()
-        dashboard_layout.addWidget(upload_area, 1, 0, 1, 2)
+        # Bottom left: Cheque Count Graph
+        self.cheque_count_graph = self.create_graph_widget("Nombre de chèques traités")
+        dashboard_layout.addWidget(self.cheque_count_graph, 1, 0)
+
+        # Bottom right: Upload and Capture Area
+        upload_capture_area = self.create_upload_capture_area()
+        dashboard_layout.addWidget(upload_capture_area, 1, 1)
 
         self.main_layout.addWidget(dashboard)
+
+    def create_upload_capture_area(self):
+        frame = QFrame()
+        layout = QVBoxLayout(frame)
+
+        title_label = QLabel("Téléchargement et Capture de Chèque")
+        title_label.setFont(QFont("Arial", 16, QFont.Weight.Bold))
+        layout.addWidget(title_label)
+
+        self.upload_frame = QLabel("Aucun fichier sélectionné")
+        self.upload_frame.setAlignment(Qt.AlignmentFlag.AlignCenter)
+        self.upload_frame.setStyleSheet("""
+            background-color: white;
+            border: 2px dashed #4CAF50;
+            border-radius: 5px;
+            padding: 20px;
+            min-height: 200px;
+        """)
+        layout.addWidget(self.upload_frame)
+
+        buttons_layout = QHBoxLayout()
+        
+        upload_btn = QPushButton("Télécharger un chèque")
+        upload_btn.setIcon(QIcon.fromTheme("document-open"))
+        upload_btn.clicked.connect(self.upload_file)
+        buttons_layout.addWidget(upload_btn)
+
+        self.camera_btn = QPushButton("Activer la caméra")
+        self.camera_btn.setIcon(QIcon.fromTheme("camera-photo"))
+        self.camera_btn.clicked.connect(self.toggle_camera)
+        buttons_layout.addWidget(self.camera_btn)
+
+        self.capture_btn = QPushButton("Capturer l'image")
+        self.capture_btn.setIcon(QIcon.fromTheme("camera-photo"))
+        self.capture_btn.clicked.connect(self.capture_image)
+        self.capture_btn.setVisible(False)
+        buttons_layout.addWidget(self.capture_btn)
+
+        layout.addLayout(buttons_layout)
+
+        return frame
+    
+  
+    def update_cheque_count_graph(self):
+        try:
+            ca = certifi.where()
+            client = pymongo.MongoClient(
+                "mongodb+srv://stokage15:12345@cluster0.o33im.mongodb.net/xyzdb?retryWrites=true&w=majority",
+                tlsCAFile=ca
+            )
+            db = client['myFirstDatabase']
+            collection = db['transactions']
+
+            # Get the last 6 months
+            end_date = datetime.now()
+            start_date = end_date - timedelta(days=180)
+
+            pipeline = [
+                {
+                    "$match": {
+                        "date": {"$gte": start_date, "$lte": end_date}
+                    }
+                },
+                {
+                    "$group": {
+                        "_id": {
+                            "year": {"$year": "$date"},
+                            "month": {"$month": "$date"}
+                        },
+                        "count": {"$sum": 1}
+                    }
+                },
+                {
+                    "$sort": {"_id.year": 1, "_id.month": 1}
+                }
+            ]
+
+            results = list(collection.aggregate(pipeline))
+
+            months = []
+            counts = []
+
+            for result in results:
+                month_year = f"{result['_id']['year']}-{result['_id']['month']:02d}"
+                months.append(month_year)
+                counts.append(result['count'])
+
+            ax = self.cheque_count_graph.findChild(FigureCanvas).figure.gca()
+            ax.clear()
+            ax.bar(months, counts, color='#4CAF50')
+            ax.set_title('Nombre de chèques traités')
+            ax.set_xlabel('Mois')
+            ax.set_ylabel('Nombre de chèques')
+            ax.tick_params(axis='x', rotation=45)
+            ax.grid(True, linestyle='--', alpha=0.7)
+
+            # Format y-axis to show whole numbers
+            ax.yaxis.set_major_locator(MaxNLocator(integer=True))
+
+            self.cheque_count_graph.findChild(FigureCanvas).figure.tight_layout()
+            self.cheque_count_graph.findChild(FigureCanvas).draw()
+
+        except Exception as e:
+            print(f"Error updating cheque count graph: {str(e)}")
+  
 
     def create_graph_widget(self, title):
         frame = QFrame()
