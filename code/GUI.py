@@ -62,14 +62,9 @@ class ChequeProcessor(QMainWindow):
         self.timer = QTimer(self)
         self.timer.timeout.connect(self.update_frame)
 
-        self.balance_timer = QTimer(self)
-        self.balance_timer.timeout.connect(self.update_balance)
-        self.balance_timer.start(300000)  # 300 seconds
-
         QTimer.singleShot(0, self.initial_update)
 
     def initial_update(self):
-        self.update_balance()
         self.refresh_transactions()
 
     def refresh_dashboard(self):
@@ -83,11 +78,6 @@ class ChequeProcessor(QMainWindow):
         logo = QLabel("Tableau de Bord - Processeur de Chèques")
         logo.setFont(QFont("Arial", 24, QFont.Weight.Bold))
         header_layout.addWidget(logo)
-
-        self.balance_label = QLabel("Solde: Chargement...")
-        self.balance_label.setAlignment(Qt.AlignmentFlag.AlignRight | Qt.AlignmentFlag.AlignVCenter)
-        self.balance_label.setFont(QFont("Arial", 16))
-        header_layout.addWidget(self.balance_label)
 
         self.main_layout.addWidget(header)
 
@@ -470,9 +460,9 @@ class ChequeProcessor(QMainWindow):
 
             # Insert to the performance collection
             performance_log = {
-            "date": datetime.now(),
-            "image_path": file_path,
-            "status": "success" if success else "failure"
+                "date": datetime.now(),
+                "image_path": file_path,
+                "status": "success" if success else "failure"
             }
             ca = certifi.where()
             client = pymongo.MongoClient("mongodb+srv://stokage15:12345@cluster0.o33im.mongodb.net/xyzdb?retryWrites=true&w=majority",tlsCAFile=ca)
@@ -485,6 +475,8 @@ class ChequeProcessor(QMainWindow):
                 insert_result = self.insert_to_mongodb(result["montant_en_chiffres"], result["similarite"], bank)
                 # Show result window
                 self.show_result_window(file_path, bank, result)
+                # Calculate and show balance
+                self.show_balance()
             else:
                 QMessageBox.warning(self, "Processing Failed", "La similarité est trop faible pour accepter le résultat.")
                 self.show_result_window(file_path, bank, result)
@@ -494,6 +486,20 @@ class ChequeProcessor(QMainWindow):
         except Exception as e:
             QMessageBox.critical(self, "Erreur", f"Une erreur est survenue: {str(e)}")
 
+    def show_balance(self):
+        try:
+            emettrice = "CCP"
+            debitrice = "CPA"
+            balance = self.calculate_bank_balance(emettrice, debitrice)
+            if balance > 0:
+                result = f"Solde: {debitrice} doit {abs(balance):.2f} DA à {emettrice}"
+            elif balance < 0:
+                result = f"Solde: {emettrice} doit {abs(balance):.2f} DA à {debitrice}"
+            else:
+                result = f"Solde: 0.00 DA entre {emettrice} et {debitrice}"
+            QMessageBox.information(self, "Solde Actuel", result)
+        except Exception as e:
+            QMessageBox.warning(self, "Erreur de Solde", f"Erreur lors du calcul du solde: {str(e)}")
 
     def insert_to_mongodb(self, montant, similarity_percentage, bank):
         if similarity_percentage >= 99:
