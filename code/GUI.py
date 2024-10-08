@@ -221,22 +221,6 @@ class ChequeProcessor(QMainWindow):
 
         return frame
 
-    def create_table_widget(self, title):
-        frame = QFrame()
-        layout = QVBoxLayout(frame)
-        
-        title_label = QLabel(title)
-        title_label.setFont(QFont("Arial", 16, QFont.Weight.Bold))
-        layout.addWidget(title_label)
-
-        table = QTableWidget()
-        table.setColumnCount(5)
-        table.setHorizontalHeaderLabels(["Date", "Banque Émettrice", "Banque Débitrice", "Montant", "ID"])
-        table.horizontalHeader().setStretchLastSection(True)
-        layout.addWidget(table)
-
-        return frame
-
 
     def create_upload_area(self):
         frame = QFrame()
@@ -279,17 +263,6 @@ class ChequeProcessor(QMainWindow):
 
         return frame
     
-    def create_main_content(self):
-        main_content = QSplitter(Qt.Orientation.Horizontal)
-        
-        left_panel = self.create_left_panel()
-        right_panel = self.create_right_panel()
-
-        main_content.addWidget(left_panel)
-        main_content.addWidget(right_panel)
-        main_content.setSizes([400, 800])
-
-        self.main_layout.addWidget(main_content)
 
     def create_footer(self):
         footer = QWidget()
@@ -302,21 +275,6 @@ class ChequeProcessor(QMainWindow):
 
         self.main_layout.addWidget(footer)
 
-    def update_balance(self):
-        try:
-            emettrice = "CCP"
-            debitrice = "CPA"
-            balance = self.calculate_bank_balance(emettrice, debitrice)
-            if balance > 0:
-                result = f"Solde: {debitrice} doit {abs(balance):.2f} DA à {emettrice}"
-            elif balance < 0:
-                result = f"Solde: {emettrice} doit {abs(balance):.2f} DA à {debitrice}"
-            else:
-                result = f"Solde: 0.00 DA entre {emettrice} et {debitrice}"
-            self.balance_label.setText(result)
-        except Exception as e:
-            self.balance_label.setText("Erreur lors du chargement du solde")
-            print(f"Error updating balance: {str(e)}")
 
     def create_left_panel(self):
         left_panel = QWidget()
