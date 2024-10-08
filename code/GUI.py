@@ -447,18 +447,6 @@ class ChequeProcessor(QMainWindow):
     def create_right_panel(self):
         right_panel = QTabWidget()
 
-        # Transactions Tab
-        transactions_tab = QWidget()
-        transactions_layout = QVBoxLayout(transactions_tab)
-
-        self.transactions_table = QTableWidget()
-        self.transactions_table.setColumnCount(5)
-        self.transactions_table.setHorizontalHeaderLabels(["Date", "Banque Émettrice", "Banque Débitrice", "Montant", "ID"])
-        self.transactions_table.horizontalHeader().setStretchLastSection(True)
-        transactions_layout.addWidget(self.transactions_table)
-
-        right_panel.addTab(transactions_tab, "Transactions")
-
         # Graph Tab for Transaction History
         graph_tab = QWidget()
         graph_layout = QVBoxLayout(graph_tab)
@@ -490,17 +478,6 @@ class ChequeProcessor(QMainWindow):
 
             # Fetch the most recent transactions (limit to 10 for example)
             recent_transactions = list(collection.find().sort("date", -1).limit(10))
-
-            table = self.transactions_table.findChild(QTableWidget)
-            table.setRowCount(0)
-            for transaction in recent_transactions:
-                row_position = table.rowCount()
-                table.insertRow(row_position)
-                table.setItem(row_position, 0, QTableWidgetItem(transaction['date'].strftime("%Y-%m-%d %H:%M")))
-                table.setItem(row_position, 1, QTableWidgetItem(transaction['banque_emetrice']))
-                table.setItem(row_position, 2, QTableWidgetItem(transaction['banque_debitrice']))
-                table.setItem(row_position, 3, QTableWidgetItem(f"{float(transaction['montant']):,.2f} DA"))
-                table.setItem(row_position, 4, QTableWidgetItem(str(transaction['_id'])))
 
         except Exception as e:
             print(f"Error refreshing transactions: {str(e)}")       
