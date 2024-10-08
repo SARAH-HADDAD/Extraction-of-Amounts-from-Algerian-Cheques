@@ -9,7 +9,7 @@ from PyQt6.QtWidgets import (QApplication, QMainWindow, QWidget, QVBoxLayout, QH
 from PyQt6.QtGui import QPixmap, QFont, QImage, QIcon
 from PyQt6.QtCore import Qt, QTimer
 import pandas as pd
-from matplotlib.ticker import MaxNLocator
+from matplotlib.ticker import MaxNLocator, FuncFormatter
 from matplotlib.figure import Figure
 from matplotlib.backends.backend_qt5agg import FigureCanvasQTAgg as FigureCanvas
 from bson.decimal128 import Decimal128
@@ -17,6 +17,8 @@ from decimal import Decimal
 from cheque_classifier import classify_cheque
 from extraction import process_cheque
 import matplotlib.pyplot as plt
+import mplcursors
+import seaborn as sns
 
 class ChequeProcessor(QMainWindow):
     def __init__(self):
@@ -63,6 +65,202 @@ class ChequeProcessor(QMainWindow):
         self.timer.timeout.connect(self.update_frame)
 
         QTimer.singleShot(0, self.initial_update)
+
+    def setup_graph_style(self, ax, title, xlabel, ylabel):
+        ax.set_facecolor('#f0f0f0')
+        ax.set_title(title, fontsize=16, fontweight='bold', pad=20)
+        ax.set_xlabel(xlabel, fontsize=12, fontweight='bold')
+        ax.set_ylabel(ylabel, fontsize=12, fontweight='bold')
+        ax.tick_params(axis='both', which='major', labelsize=10)
+        ax.grid(True, linestyle='--', alpha=0.7, color='#cccccc')
+        ax.spines['top'].set_visible(False)
+        ax.spines['right'].set_visible(False)
+        ax.spines['bottom'].set_color('#999999')
+        ax.spines['left'].set_color('#999999')
+
+    def update_transaction_graph(self):
+        try:
+            ca = certifi.where()
+            client = pymongo.MongoClient(
+                "mongodb+srv://stokage15:12345@cluster0.o33im.mongodb.net/xyzdb?retryWrites=true&w=majority",
+                tlsCAFile=ca
+            )
+            db = client['myFirstDatabase']
+            collection = db['transactions']
+
+            end_date = datetime.now()
+            start_date = end_date - timedelta(days=180)
+
+            pipeline = [
+                {
+                    "$match": {
+                        "date": {"$gte": start_date, "$lte": end_date}
+                    }
+                },
+                {
+                    "$group": {
+                        "_id": {
+                            "year": {"$year": "$date"},
+                            "month": {"$month": "$date"}
+                        },
+                        "total_amount": {"$sum": {"$toDouble": "$montant"}}
+                    }
+                },
+                {
+                    "$sort": {"_id.year": 1, "_id.month": 1}
+                }
+            ]
+
+            results = list(collection.aggregate(pipeline))
+
+            months = []
+            amounts = []
+
+            for result in results:
+                month_year = f"{result['_id']['year']}-{result['_id']['month']:02d}"
+                months.append(month_year)
+                amounts.append(result['total_amount'])
+
+            fig = self.transaction_history_graph.findChild(FigureCanvas).figure
+            fig.clear()
+            ax = fig.add_subplot(111)
+
+            colors = sns.color_palette("viridis", len(months))
+            bars = ax.bar(months, amounts, color=colors, alpha=0.8)
+
+            self.setup_graph_style(ax, 'Montant Total Compensé par Mois', 'Mois', 'Montant Total Compensé (DA)')
+            ax.tick_params(axis='x', rotation=45)
+
+            ax.yaxis.set_major_formatter(FuncFormatter(lambda x, p: f"{x:,.0f} DA"))
+
+            cursor = mplcursors.cursor(bars, hover=True)
+            cursor.connect("add", lambda sel: sel.annotation.set_text(
+                f'Mois: {months[sel.target.index]}\nMontant: {sel.target[1]:,.0f} DA'))
+
+            fig.tight_layout()
+            self.transaction_history_graph.findChild(FigureCanvas).draw()
+
+        except Exception as e:
+            print(f"Error updating transaction graph: {str(e)}")
+
+    def refresh_performance_graph(self):
+        try:
+            ca = certifi.where()
+            client = pymongo.MongoClient(
+                "mongodb+srv://stokage15:12345@cluster0.o33im.mongodb.net/xyzdb?retryWrites=true&w=majority",
+                tlsCAFile=ca
+            )
+            db = client['myFirstDatabase']
+            collection_performance = db['system_performance']
+
+            performance_data = list(collection_performance.find())
+            
+            if performance_data:
+                success_count = sum(1 for log in performance_data if log['status'] == 'success')
+                fail_count = sum(1 for log in performance_data if log['status'] == 'failure')
+
+                total = success_count + fail_count
+                if total > 0:
+                    success_percentage = (success_count / total) * 100
+                    fail_percentage = (fail_count / total) * 100
+
+                    fig = self.performance_graph.findChild(FigureCanvas).figure
+                    fig.clear()
+                    ax = fig.add_subplot(111)
+
+                    labels = ['Succès', 'Échec']
+                    sizes = [success_percentage, fail_percentage]
+                    colors = sns.color_palette("Set2", 2)
+
+                    wedges, texts = ax.pie(sizes, labels=labels, colors=colors,
+                                           startangle=90, wedgeprops=dict(width=0.5, edgecolor='white'))
+                    
+                    self.setup_graph_style(ax, "Performance du Système", "", "")
+                    ax.axis('equal')
+
+                    legend = ax.legend(wedges, labels, title="Statut", loc="center left", bbox_to_anchor=(1, 0, 0.5, 1))
+                    legend.get_title().set_fontweight('bold')
+
+                    cursor = mplcursors.cursor(wedges, hover=True)
+                    cursor.connect("add", lambda sel: sel.annotation.set_text(
+                        f'{sel.artist.get_label()}: {sel.target.theta/3.6:.1f}%'))
+
+                    fig.tight_layout()
+                    self.performance_graph.findChild(FigureCanvas).draw()
+                else:
+                    self.performance_graph.findChild(FigureCanvas).figure.clear()
+                    self.performance_graph.findChild(FigureCanvas).draw()
+            else:
+                self.performance_graph.findChild(FigureCanvas).figure.clear()
+                self.performance_graph.findChild(FigureCanvas).draw()
+
+        except Exception as e:
+            print(f"Error updating performance graph: {str(e)}")
+
+    def update_cheque_count_graph(self):
+        try:
+            ca = certifi.where()
+            client = pymongo.MongoClient(
+                "mongodb+srv://stokage15:12345@cluster0.o33im.mongodb.net/xyzdb?retryWrites=true&w=majority",
+                tlsCAFile=ca
+            )
+            db = client['myFirstDatabase']
+            collection = db['transactions']
+
+            end_date = datetime.now()
+            start_date = end_date - timedelta(days=180)
+
+            pipeline = [
+                {
+                    "$match": {
+                        "date": {"$gte": start_date, "$lte": end_date}
+                    }
+                },
+                {
+                    "$group": {
+                        "_id": {
+                            "year": {"$year": "$date"},
+                            "month": {"$month": "$date"}
+                        },
+                        "count": {"$sum": 1}
+                    }
+                },
+                {
+                    "$sort": {"_id.year": 1, "_id.month": 1}
+                }
+            ]
+
+            results = list(collection.aggregate(pipeline))
+
+            months = []
+            counts = []
+
+            for result in results:
+                month_year = f"{result['_id']['year']}-{result['_id']['month']:02d}"
+                months.append(month_year)
+                counts.append(result['count'])
+
+            fig = self.cheque_count_graph.findChild(FigureCanvas).figure
+            fig.clear()
+            ax = fig.add_subplot(111)
+
+            colors = sns.color_palette("rocket", len(months))
+            bars = ax.bar(months, counts, color=colors, alpha=0.8)
+
+            self.setup_graph_style(ax, 'Nombre de chèques traités par mois', 'Mois', 'Nombre de chèques')
+            ax.tick_params(axis='x', rotation=45)
+
+            ax.yaxis.set_major_locator(MaxNLocator(integer=True))
+
+            cursor = mplcursors.cursor(bars, hover=True)
+            cursor.connect("add", lambda sel: sel.annotation.set_text(
+                f'Mois: {months[sel.target.index]}\nNombre de chèques: {int(sel.target[1])}'))
+
+            fig.tight_layout()
+            self.cheque_count_graph.findChild(FigureCanvas).draw()
+
+        except Exception as e:
+            print(f"Error updating cheque count graph: {str(e)}")
 
     def initial_update(self):
         self.refresh_transactions()
@@ -144,70 +342,6 @@ class ChequeProcessor(QMainWindow):
 
         return frame
     
-  
-    def update_cheque_count_graph(self):
-        try:
-            ca = certifi.where()
-            client = pymongo.MongoClient(
-                "mongodb+srv://stokage15:12345@cluster0.o33im.mongodb.net/xyzdb?retryWrites=true&w=majority",
-                tlsCAFile=ca
-            )
-            db = client['myFirstDatabase']
-            collection = db['transactions']
-
-            # Get the last 6 months
-            end_date = datetime.now()
-            start_date = end_date - timedelta(days=180)
-
-            pipeline = [
-                {
-                    "$match": {
-                        "date": {"$gte": start_date, "$lte": end_date}
-                    }
-                },
-                {
-                    "$group": {
-                        "_id": {
-                            "year": {"$year": "$date"},
-                            "month": {"$month": "$date"}
-                        },
-                        "count": {"$sum": 1}
-                    }
-                },
-                {
-                    "$sort": {"_id.year": 1, "_id.month": 1}
-                }
-            ]
-
-            results = list(collection.aggregate(pipeline))
-
-            months = []
-            counts = []
-
-            for result in results:
-                month_year = f"{result['_id']['year']}-{result['_id']['month']:02d}"
-                months.append(month_year)
-                counts.append(result['count'])
-
-            ax = self.cheque_count_graph.findChild(FigureCanvas).figure.gca()
-            ax.clear()
-            ax.bar(months, counts, color='#4CAF50')
-            ax.set_title('Nombre de chèques traités')
-            ax.set_xlabel('Mois')
-            ax.set_ylabel('Nombre de chèques')
-            ax.tick_params(axis='x', rotation=45)
-            ax.grid(True, linestyle='--', alpha=0.7)
-
-            # Format y-axis to show whole numbers
-            ax.yaxis.set_major_locator(MaxNLocator(integer=True))
-
-            self.cheque_count_graph.findChild(FigureCanvas).figure.tight_layout()
-            self.cheque_count_graph.findChild(FigureCanvas).draw()
-
-        except Exception as e:
-            print(f"Error updating cheque count graph: {str(e)}")
-  
-
     def create_graph_widget(self, title):
         frame = QFrame()
         layout = QVBoxLayout(frame)
@@ -349,48 +483,6 @@ class ChequeProcessor(QMainWindow):
 
         return right_panel
 
-
-    def update_transaction_graph(self):
-        try:
-            ca = certifi.where()
-            client = pymongo.MongoClient(
-                "mongodb+srv://stokage15:12345@cluster0.o33im.mongodb.net/xyzdb?retryWrites=true&w=majority",
-                tlsCAFile=ca
-            )
-            db = client['myFirstDatabase']
-            collection = db['transactions']
-
-            # Fetch the most recent transactions (limit to 10 for example)
-            recent_transactions = list(collection.find().sort("date", -1).limit(10))
-
-            dates = []
-            amounts = []
-            for transaction in recent_transactions:
-                dates.append(transaction['date'])
-                amounts.append(float(transaction['montant']))
-
-            # Reverse the order for chronological display
-            dates.reverse()
-            amounts.reverse()
-
-            ax = self.transaction_history_graph.findChild(FigureCanvas).figure.gca()
-            ax.clear()
-            ax.plot(dates, amounts, marker='o', linestyle='-', color='#4CAF50')
-            ax.set_title('Historique des Transactions')
-            ax.set_xlabel('Date')
-            ax.set_ylabel('Montant')
-            ax.tick_params(axis='x', rotation=45)
-            ax.grid(True, linestyle='--', alpha=0.7)
-
-            # Format y-axis labels as currency
-            ax.yaxis.set_major_formatter(plt.FuncFormatter(lambda x, p: f"{x:,.2f} DA"))
-
-            self.transaction_history_graph.findChild(FigureCanvas).figure.tight_layout()
-            self.transaction_history_graph.findChild(FigureCanvas).draw()
-
-        except Exception as e:
-            print(f"Error updating transaction graph: {str(e)}")
-
     def refresh_transactions(self):
         try:
             ca = certifi.where()
@@ -416,63 +508,7 @@ class ChequeProcessor(QMainWindow):
                 table.setItem(row_position, 4, QTableWidgetItem(str(transaction['_id'])))
 
         except Exception as e:
-            print(f"Error refreshing transactions: {str(e)}")
-            
-    def refresh_performance_graph(self):
-        try:
-            ca = certifi.where()
-            client = pymongo.MongoClient(
-                "mongodb+srv://stokage15:12345@cluster0.o33im.mongodb.net/xyzdb?retryWrites=true&w=majority",
-                tlsCAFile=ca
-            )
-            db = client['myFirstDatabase']
-            collection_performance = db['system_performance']
-
-            # Fetch all performance logs
-            performance_data = list(collection_performance.find())
-            
-            if performance_data:
-                success_count = sum(1 for log in performance_data if log['status'] == 'success')
-                fail_count = sum(1 for log in performance_data if log['status'] == 'failure')
-
-                total = success_count + fail_count
-                if total > 0:
-                    success_percentage = (success_count / total) * 100
-                    fail_percentage = (fail_count / total) * 100
-
-                    ax = self.performance_graph.findChild(FigureCanvas).figure.gca()
-                    ax.clear()
-
-                    labels = ['Succès', 'Échec']
-                    sizes = [success_percentage, fail_percentage]
-                    colors = ['#4CAF50', '#FF5252']
-
-                    wedges, texts, autotexts = ax.pie(sizes, labels=labels, colors=colors, autopct='%1.1f%%',
-                                                      startangle=90, pctdistance=0.85)
-                    
-                    # Customize text properties
-                    for autotext in autotexts:
-                        autotext.set_color('white')
-                        autotext.set_fontweight('bold')
-                        autotext.set_fontsize(10)
-
-                    for text in texts:
-                        text.set_fontsize(12)
-                    
-                    ax.axis('equal')
-                    ax.set_title("Performance du Système", fontsize=16, fontweight='bold', pad=20)
-
-                    self.performance_graph.findChild(FigureCanvas).figure.tight_layout()
-                    self.performance_graph.findChild(FigureCanvas).draw()
-                else:
-                    self.performance_graph.findChild(FigureCanvas).figure.clear()
-                    self.performance_graph.findChild(FigureCanvas).draw()
-            else:
-                self.performance_graph.findChild(FigureCanvas).figure.clear()
-                self.performance_graph.findChild(FigureCanvas).draw()
-
-        except Exception as e:
-            print(f"Error updating performance graph: {str(e)}")
+            print(f"Error refreshing transactions: {str(e)}")       
 
     def create_performance_pie_chart(self, success_percentage, fail_percentage):
         """Create and display a circular pie chart showing system success and failure rates."""
@@ -752,4 +788,3 @@ if __name__ == "__main__":
     window = ChequeProcessor()
     window.show()
     sys.exit(app.exec())
-
