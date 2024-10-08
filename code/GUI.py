@@ -58,7 +58,6 @@ class ChequeProcessor(QMainWindow):
 
         self.create_header()
         self.create_dashboard()
-        self.create_footer()
 
         self.camera = None
         self.timer = QTimer(self)
@@ -172,8 +171,15 @@ class ChequeProcessor(QMainWindow):
                     sizes = [success_percentage, fail_percentage]
                     colors = sns.color_palette("Set2", 2)
 
-                    wedges, texts = ax.pie(sizes, labels=labels, colors=colors,
-                                           startangle=90, wedgeprops=dict(width=0.5, edgecolor='white'))
+                    wedges, texts, autotexts = ax.pie(
+                    sizes, labels=labels, colors=colors, startangle=90,
+                    wedgeprops=dict(width=0.5, edgecolor='white'),
+                    autopct='%1.1f%%')
+
+                    # Style the percentage text
+                    for autotext in autotexts:
+                        autotext.set_color('black')
+                        autotext.set_fontweight('bold')
                     
                     self.setup_graph_style(ax, "Performance du Système", "", "")
                     ax.axis('equal')
@@ -285,9 +291,9 @@ class ChequeProcessor(QMainWindow):
         dashboard = QWidget()
         dashboard_layout = QGridLayout(dashboard)
 
-        # Top row: Two graphs
+
         self.transaction_history_graph = self.create_graph_widget("Historique des Transactions")
-        dashboard_layout.addWidget(self.transaction_history_graph, 0, 0)
+        dashboard_layout.addWidget(self.transaction_history_graph, 1, 1)
 
         self.performance_graph = self.create_graph_widget("Performance du Système")
         dashboard_layout.addWidget(self.performance_graph, 0, 1)
@@ -296,9 +302,9 @@ class ChequeProcessor(QMainWindow):
         self.cheque_count_graph = self.create_graph_widget("Nombre de chèques traités")
         dashboard_layout.addWidget(self.cheque_count_graph, 1, 0)
 
-        # Bottom right: Upload and Capture Area
+
         upload_capture_area = self.create_upload_capture_area()
-        dashboard_layout.addWidget(upload_capture_area, 1, 1)
+        dashboard_layout.addWidget(upload_capture_area, 0, 0)
 
         self.main_layout.addWidget(dashboard)
 
@@ -397,12 +403,6 @@ class ChequeProcessor(QMainWindow):
         layout.addLayout(buttons_layout)
 
         return frame
-    
-
-    def create_footer(self):
-        footer = QWidget()
-        footer_layout = QHBoxLayout(footer)
-        self.main_layout.addWidget(footer)
 
 
     def create_left_panel(self):
