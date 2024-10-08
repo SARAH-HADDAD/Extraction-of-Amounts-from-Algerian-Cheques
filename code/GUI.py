@@ -64,11 +64,11 @@ class ChequeProcessor(QMainWindow):
         self.timer = QTimer(self)
         self.timer.timeout.connect(self.update_frame)
 
+        # Directly update all graphs when the application starts
         QTimer.singleShot(0, self.initial_update)
 
     def setup_graph_style(self, ax, title, xlabel, ylabel):
         ax.set_facecolor('#f0f0f0')
-        ax.set_title(title, fontsize=16, fontweight='bold', pad=20)
         ax.set_xlabel(xlabel, fontsize=12, fontweight='bold')
         ax.set_ylabel(ylabel, fontsize=12, fontweight='bold')
         ax.tick_params(axis='both', which='major', labelsize=10)
@@ -128,7 +128,7 @@ class ChequeProcessor(QMainWindow):
             colors = sns.color_palette("viridis", len(months))
             bars = ax.bar(months, amounts, color=colors, alpha=0.8)
 
-            self.setup_graph_style(ax, 'Montant Total Compensé par Mois', 'Mois', 'Montant Total Compensé (DA)')
+            self.setup_graph_style(ax, 'Montant Total Compensé par Mois', 'Mois', 'Montant Total Compensé')
             ax.tick_params(axis='x', rotation=45)
 
             ax.yaxis.set_major_formatter(FuncFormatter(lambda x, p: f"{x:,.0f} DA"))
@@ -264,6 +264,7 @@ class ChequeProcessor(QMainWindow):
 
     def initial_update(self):
         self.refresh_transactions()
+        self.refresh_dashboard()
 
     def refresh_dashboard(self):
         self.update_transaction_graph()
@@ -401,12 +402,6 @@ class ChequeProcessor(QMainWindow):
     def create_footer(self):
         footer = QWidget()
         footer_layout = QHBoxLayout(footer)
-
-        refresh_btn = QPushButton("Rafraîchir le tableau de bord")
-        refresh_btn.setIcon(QIcon.fromTheme("view-refresh"))
-        refresh_btn.clicked.connect(self.refresh_dashboard)
-        footer_layout.addWidget(refresh_btn, alignment=Qt.AlignmentFlag.AlignCenter)
-
         self.main_layout.addWidget(footer)
 
 
@@ -534,9 +529,6 @@ class ChequeProcessor(QMainWindow):
         
         # Equal aspect ratio ensures that pie is drawn as a circle
         ax.axis('equal')
-        
-        # Add title
-        ax.set_title("Performance du Système", fontsize=16, fontweight='bold', pad=20)
 
         # Add legend
         ax.legend(wedges, labels, title="Statut", loc="center left", bbox_to_anchor=(1, 0, 0.5, 1))
