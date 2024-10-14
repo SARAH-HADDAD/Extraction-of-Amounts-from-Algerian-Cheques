@@ -5,7 +5,7 @@ import cv2
 from datetime import datetime, timedelta
 from PyQt6.QtWidgets import (QApplication, QMainWindow, QWidget, QVBoxLayout, QHBoxLayout, 
                              QPushButton, QLabel, QFileDialog, QFrame, QGridLayout, QMessageBox,
-                             QTableWidget, QTableWidgetItem, QSplitter, QTabWidget)
+                             QTableWidget, QTableWidgetItem, QSplitter, QTabWidget,QStackedWidget)
 from PyQt6.QtGui import QPixmap, QFont, QImage, QIcon
 from PyQt6.QtCore import Qt, QTimer
 import pandas as pd
@@ -56,16 +56,61 @@ class ChequeProcessor(QMainWindow):
         self.setCentralWidget(self.central_widget)
         self.main_layout = QVBoxLayout(self.central_widget)
 
-        self.create_header()
-        self.create_dashboard()
+        self.stacked_widget = QStackedWidget()
+        self.main_layout.addWidget(self.stacked_widget)
+
+        self.create_main_page()
+        self.create_graphs_page()
+
+        self.stacked_widget.addWidget(self.main_page)
+        self.stacked_widget.addWidget(self.graphs_page)
 
         self.camera = None
         self.timer = QTimer(self)
         self.timer.timeout.connect(self.update_frame)
 
-        # Directly update all graphs when the application starts
-        QTimer.singleShot(0, self.initial_update)
+    def create_main_page(self):
+        self.main_page = QWidget()
+        main_layout = QVBoxLayout(self.main_page)
 
+        title = QLabel("Tableau de Bord - Processeur de Chèques")
+        title.setFont(QFont("Arial", 24, QFont.Weight.Bold))
+        title.setAlignment(Qt.AlignmentFlag.AlignCenter)
+        main_layout.addWidget(title)
+
+        upload_capture_area = self.create_upload_capture_area()
+        main_layout.addWidget(upload_capture_area)
+
+        view_graphs_btn = QPushButton("Voir les Graphiques")
+        view_graphs_btn.clicked.connect(self.show_graphs_page)
+        main_layout.addWidget(view_graphs_btn, alignment=Qt.AlignmentFlag.AlignCenter)
+
+    def create_graphs_page(self):
+        self.graphs_page = QWidget()
+        graphs_layout = QGridLayout(self.graphs_page)
+
+        self.transaction_history_graph = self.create_graph_widget("Historique des Transactions")
+        graphs_layout.addWidget(self.transaction_history_graph, 0, 0)
+
+        self.performance_graph = self.create_graph_widget("Performance du Système")
+        graphs_layout.addWidget(self.performance_graph, 0, 1)
+
+        self.cheque_count_graph = self.create_graph_widget("Nombre de chèques traités")
+        graphs_layout.addWidget(self.cheque_count_graph, 1, 0)
+
+        back_btn = QPushButton("Retour à la page principale")
+        back_btn.clicked.connect(self.show_main_page)
+        graphs_layout.addWidget(back_btn, 1, 1)
+
+    def show_graphs_page(self):
+        self.update_transaction_graph()
+        self.refresh_performance_graph()
+        self.update_cheque_count_graph()
+        self.stacked_widget.setCurrentWidget(self.graphs_page)
+
+    def show_main_page(self):
+        self.stacked_widget.setCurrentWidget(self.main_page)
+        
     def setup_graph_style(self, ax, title, xlabel, ylabel):
         ax.set_facecolor('#f0f0f0')
         ax.set_xlabel(xlabel, fontsize=12, fontweight='bold')

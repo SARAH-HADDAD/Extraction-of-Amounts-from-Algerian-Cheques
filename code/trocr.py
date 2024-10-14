@@ -50,11 +50,11 @@ def eval_new_data_with_accuracy(
 
 # Usage
 processor = TrOCRProcessor.from_pretrained('microsoft/trocr-small-stage1')
-model = VisionEncoderDecoderModel.from_pretrained("/Users/sarahhaddad/Documents/GitHub/TrOCR/models/model_num")
+model = VisionEncoderDecoderModel.from_pretrained("/Users/sarahhaddad/Documents/GitHub/TrOCR/models/idk")
 
 eval_new_data_with_accuracy(
-    data_path="/Users/sarahhaddad/Documents/GitHub/TrOCR/data/num/valid",
-    csv_path="/Users/sarahhaddad/Documents/GitHub/TrOCR/data/num/valid/valid.csv",
+    data_path="/Users/sarahhaddad/Documents/GitHub/TrOCR/data/fr/valid",
+    csv_path="/Users/sarahhaddad/Documents/GitHub/TrOCR/data/fr/valid/valid.csv",
     processor=processor,
     model=model,
     num_samples=100
