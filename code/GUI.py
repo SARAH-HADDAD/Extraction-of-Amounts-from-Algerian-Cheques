@@ -4,19 +4,15 @@ import pymongo
 import cv2
 from datetime import datetime, timedelta
 from PyQt6.QtWidgets import (QApplication, QMainWindow, QWidget, QVBoxLayout, QHBoxLayout, 
-                             QPushButton, QLabel, QFileDialog, QFrame, QGridLayout, QMessageBox,
-                             QTableWidget, QTableWidgetItem, QSplitter, QTabWidget,QStackedWidget)
+                             QPushButton, QLabel, QFileDialog, QFrame, QGridLayout, QMessageBox, QTabWidget,QStackedWidget)
 from PyQt6.QtGui import QPixmap, QFont, QImage, QIcon
 from PyQt6.QtCore import Qt, QTimer
-import pandas as pd
 from matplotlib.ticker import MaxNLocator, FuncFormatter
 from matplotlib.figure import Figure
 from matplotlib.backends.backend_qt5agg import FigureCanvasQTAgg as FigureCanvas
-from bson.decimal128 import Decimal128
 from decimal import Decimal
 from cheque_classifier import classify_cheque
 from extraction import process_cheque
-import matplotlib.pyplot as plt
 import mplcursors
 import seaborn as sns
 
@@ -313,46 +309,6 @@ class ChequeProcessor(QMainWindow):
         except Exception as e:
             print(f"Error updating cheque count graph: {str(e)}")
 
-    def initial_update(self):
-        self.refresh_transactions()
-        self.refresh_dashboard()
-
-    def refresh_dashboard(self):
-        self.update_transaction_graph()
-        self.refresh_performance_graph()
-        self.update_cheque_count_graph()
-
-    def create_header(self):
-        header = QWidget()
-        header_layout = QHBoxLayout(header)
-
-        logo = QLabel("Tableau de Bord - Processeur de Chèques")
-        logo.setFont(QFont("Arial", 24, QFont.Weight.Bold))
-        header_layout.addWidget(logo)
-
-        self.main_layout.addWidget(header)
-
-    def create_dashboard(self):
-        dashboard = QWidget()
-        dashboard_layout = QGridLayout(dashboard)
-
-
-        self.transaction_history_graph = self.create_graph_widget("Historique des Transactions")
-        dashboard_layout.addWidget(self.transaction_history_graph, 1, 1)
-
-        self.performance_graph = self.create_graph_widget("Performance du Système")
-        dashboard_layout.addWidget(self.performance_graph, 0, 1)
-
-        # Bottom left: Cheque Count Graph
-        self.cheque_count_graph = self.create_graph_widget("Nombre de chèques traités")
-        dashboard_layout.addWidget(self.cheque_count_graph, 1, 0)
-
-
-        upload_capture_area = self.create_upload_capture_area()
-        dashboard_layout.addWidget(upload_capture_area, 0, 0)
-
-        self.main_layout.addWidget(dashboard)
-
     def create_upload_capture_area(self):
         frame = QFrame()
         layout = QVBoxLayout(frame)
@@ -406,110 +362,6 @@ class ChequeProcessor(QMainWindow):
         layout.addWidget(graph)
 
         return frame
-
-
-    def create_upload_area(self):
-        frame = QFrame()
-        layout = QVBoxLayout(frame)
-
-        title_label = QLabel("Téléchargement de Chèque")
-        title_label.setFont(QFont("Arial", 16, QFont.Weight.Bold))
-        layout.addWidget(title_label)
-
-        self.upload_frame = QLabel("Aucun fichier sélectionné")
-        self.upload_frame.setAlignment(Qt.AlignmentFlag.AlignCenter)
-        self.upload_frame.setStyleSheet("""
-            background-color: white;
-            border: 2px dashed #4CAF50;
-            border-radius: 5px;
-            padding: 20px;
-            min-height: 200px;
-        """)
-        layout.addWidget(self.upload_frame)
-
-        buttons_layout = QHBoxLayout()
-        
-        upload_btn = QPushButton("Télécharger un chèque")
-        upload_btn.setIcon(QIcon.fromTheme("document-open"))
-        upload_btn.clicked.connect(self.upload_file)
-        buttons_layout.addWidget(upload_btn)
-
-        self.camera_btn = QPushButton("Activer la caméra")
-        self.camera_btn.setIcon(QIcon.fromTheme("camera-photo"))
-        self.camera_btn.clicked.connect(self.toggle_camera)
-        buttons_layout.addWidget(self.camera_btn)
-
-        self.capture_btn = QPushButton("Capturer l'image")
-        self.capture_btn.setIcon(QIcon.fromTheme("camera-photo"))
-        self.capture_btn.clicked.connect(self.capture_image)
-        self.capture_btn.setVisible(False)
-        buttons_layout.addWidget(self.capture_btn)
-
-        layout.addLayout(buttons_layout)
-
-        return frame
-
-
-    def create_left_panel(self):
-        left_panel = QWidget()
-        left_layout = QVBoxLayout(left_panel)
-
-        # Upload Area
-        self.upload_frame = QLabel("Aucun fichier sélectionné")
-        self.upload_frame.setAlignment(Qt.AlignmentFlag.AlignCenter)
-        self.upload_frame.setStyleSheet("""
-            background-color: white;
-            border: 2px dashed #4CAF50;
-            border-radius: 5px;
-            padding: 20px;
-            min-height: 300px;
-        """)
-        left_layout.addWidget(self.upload_frame)
-
-        # Buttons
-        buttons_layout = QHBoxLayout()
-        
-        upload_btn = QPushButton("Télécharger un chèque")
-        upload_btn.setIcon(QIcon.fromTheme("document-open"))
-        upload_btn.clicked.connect(self.upload_file)
-        buttons_layout.addWidget(upload_btn)
-
-        self.camera_btn = QPushButton("Activer la caméra")
-        self.camera_btn.setIcon(QIcon.fromTheme("camera-photo"))
-        self.camera_btn.clicked.connect(self.toggle_camera)
-        buttons_layout.addWidget(self.camera_btn)
-
-        self.capture_btn = QPushButton("Capturer l'image")
-        self.capture_btn.setIcon(QIcon.fromTheme("camera-photo"))
-        self.capture_btn.clicked.connect(self.capture_image)
-        self.capture_btn.setVisible(False)
-        buttons_layout.addWidget(self.capture_btn)
-
-        left_layout.addLayout(buttons_layout)
-
-        return left_panel
-
-    def create_right_panel(self):
-        right_panel = QTabWidget()
-
-        # Graph Tab for Transaction History
-        graph_tab = QWidget()
-        graph_layout = QVBoxLayout(graph_tab)
-
-        self.transaction_history_graph = FigureCanvas(Figure(figsize=(5, 4)))
-        graph_layout.addWidget(self.transaction_history_graph)
-        right_panel.addTab(graph_tab, "Graphique")
-
-        # Performance Tab for System Performance
-        performance_tab = QWidget()
-        performance_layout = QVBoxLayout(performance_tab)
-
-        self.performance_graph = FigureCanvas(Figure(figsize=(5, 4)))
-        performance_layout.addWidget(self.performance_graph)
-
-        right_panel.addTab(performance_tab, "Performance du Système")
-
-        return right_panel
 
     def refresh_transactions(self):
         try:
