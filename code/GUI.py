@@ -15,6 +15,8 @@ from cheque_classifier import classify_cheque
 from extraction import process_cheque
 import mplcursors
 import seaborn as sns
+import numpy as np
+import matplotlib.pyplot as plt
 
 class ChequeProcessor(QMainWindow):
     def __init__(self):
@@ -123,7 +125,7 @@ class ChequeProcessor(QMainWindow):
     def show_graphs_page(self):
         self.update_transaction_graph()
         self.refresh_performance_graph()
-        self.update_bank_transactions_graph()  # Mettre à jour le nouveau graphique
+        self.update_bank_transactions_graph()  
         self.update_cheque_count_graph()
         self.stacked_widget.setCurrentWidget(self.graphs_page)
 
@@ -137,57 +139,62 @@ class ChequeProcessor(QMainWindow):
             db = client['myFirstDatabase']
             collection = db['transactions']
 
-            # Agréger les données par banque et par mois
+            # Aggregate data by bank and month
             pipeline = [
-                {
-                    "$group": {
-                        "_id": {
-                            "banque": "$banque_emetrice",
-                            "year": {"$year": "$date"},
-                            "month": {"$month": "$date"}
-                        },
-                        "total": {"$sum": {"$toDouble": "$montant"}},
-                    }
-                },
-                {"$sort": {"_id.year": 1, "_id.month": 1}}
+            {
+                "$group": {
+                    "_id": {
+                        "banque": "$banque_emetrice",
+                        "year": {"$year": "$date"},
+                        "month": {"$month": "$date"}
+                    },
+                    "count": {"$sum": 1}
+                }
+            },
+            {"$sort": {"_id.year": 1, "_id.month": 1}}
             ]
 
             results = list(collection.aggregate(pipeline))
 
-            # Préparer les données pour le graphique
-            banks = list(set([r['_id']['banque'] for r in results]))
-            dates = sorted(set([(r['_id']['year'], r['_id']['month']) for r in results]))
-            
+
+            banks = sorted(set(r['_id']['banque'] for r in results))
+            dates = sorted(set((r['_id']['year'], r['_id']['month']) for r in results))
+        
             fig = self.bank_transactions_graph.findChild(FigureCanvas).figure
             fig.clear()
             ax = fig.add_subplot(111)
 
-            for bank in banks:
-                amounts = []
+            # Use a color-blind friendly colormap
+            colors = plt.colormaps['Set2'](np.linspace(0, 1, len(banks)))
+
+            for i, bank in enumerate(banks):
+                counts = []
                 for date in dates:
-                    result = next((r for r in results if r['_id']['banque'] == bank and 
-                               r['_id']['year'] == date[0] and r['_id']['month'] == date[1]), None)
-                    amounts.append(result['total'] if result else 0)
+                    result = next((r for r in results if r['_id']['banque'] == bank and r['_id']['year'] == date[0] and r['_id']['month'] == date[1]), None)
+                    counts.append(result['count'] if result else 0)
 
                 date_strings = [f"{date[0]}-{date[1]:02d}" for date in dates]
-                ax.plot(date_strings, amounts, marker='o', label=bank)
+            
+                # Plot transaction count
+                ax.plot(date_strings, counts, marker='o', label=bank, color=colors[i])
 
+            # Customize the plot
             ax.set_xlabel('Date')
-            ax.set_ylabel('Montant Total (DA)')
-            ax.set_title('Évolution des Transactions par Banque')
-            ax.legend()
-            ax.tick_params(axis='x', rotation=45)   
-
+            ax.set_ylabel('Nombre de Transactions')
+            ax.set_title('Évolution du Nombre de Transactions par Banque')
+            ax.yaxis.set_major_formatter(plt.FuncFormatter(lambda x, p: f'{int(x):,d}'))
+            ax.tick_params(axis='x', rotation=45)
             ax.grid(True, linestyle='--', alpha=0.7)
-            ax.spines['top'].set_visible(False)
-            ax.spines['right'].set_visible(False)
+            ax.legend(loc='upper left', bbox_to_anchor=(1, 1))
 
-            mplcursors.cursor(ax, hover=True).connect(
-            "add", lambda sel: sel.annotation.set_text(
-                f'Banque: {sel.artist.get_label()}\nDate: {sel.target[0]}\nMontant: {sel.target[1]:.2f} DA'
-            ))
-
+            # Adjust layout
             fig.tight_layout()
+
+            # Add interactivity
+            mplcursors.cursor(ax, hover=True).connect(
+                "add", lambda sel: sel.annotation.set_text(f'Banque: {sel.artist.get_label()}\nDate: {sel.target[0]}\nNombre: {int(sel.target[1]):,d}'
+                ))
+
             self.bank_transactions_graph.findChild(FigureCanvas).draw()
 
         except Exception as e:
@@ -254,7 +261,7 @@ class ChequeProcessor(QMainWindow):
             fig.clear()
             ax = fig.add_subplot(111)
 
-            colors = sns.color_palette("viridis", len(months))
+            colors = sns.color_palette("light:#5A9", len(months))
             bars = ax.bar(months, amounts, color=colors, alpha=0.8)
 
             self.setup_graph_style(ax, 'Montant Total Compensé par Mois', 'Mois', 'Montant Total Compensé')
@@ -299,7 +306,7 @@ class ChequeProcessor(QMainWindow):
 
                     labels = ['Succès', 'Échec']
                     sizes = [success_percentage, fail_percentage]
-                    colors = sns.color_palette("Set2", 2)
+                    colors = sns.color_palette("light:#5A9", 2)
 
                     wedges, texts, autotexts = ax.pie(
                     sizes, labels=labels, colors=colors, startangle=90,
@@ -380,7 +387,7 @@ class ChequeProcessor(QMainWindow):
             fig.clear()
             ax = fig.add_subplot(111)
 
-            colors = sns.color_palette("rocket", len(months))
+            colors = sns.color_palette("light:#5A9", len(months))
             bars = ax.bar(months, counts, color=colors, alpha=0.8)
 
             self.setup_graph_style(ax, 'Nombre de chèques traités par mois', 'Mois', 'Nombre de chèques')
