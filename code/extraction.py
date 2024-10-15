@@ -1,4 +1,3 @@
-# Import necessary libraries
 from transformers import VisionEncoderDecoderModel, TrOCRProcessor, BertTokenizer, BertModel
 from ultralytics import YOLO
 import cv2
@@ -415,4 +414,3 @@ def process_cheque(image_path):
         "langue": language,
         "similarite": similarity_percentage,
     }
-

@@ -4,7 +4,7 @@ import pymongo
 import cv2
 from datetime import datetime, timedelta
 from PyQt6.QtWidgets import (QApplication, QMainWindow, QWidget, QVBoxLayout, QHBoxLayout, 
-                             QPushButton, QLabel, QFileDialog, QFrame, QGridLayout, QMessageBox, QTabWidget,QStackedWidget)
+                             QPushButton, QLabel, QFileDialog, QFrame, QGridLayout, QMessageBox, QStackedWidget)
 from PyQt6.QtGui import QPixmap, QFont, QImage, QIcon
 from PyQt6.QtCore import Qt, QTimer
 from matplotlib.ticker import MaxNLocator, FuncFormatter
@@ -91,18 +91,94 @@ class ChequeProcessor(QMainWindow):
         self.performance_graph = self.create_graph_widget("Performance du Système")
         graphs_layout.addWidget(self.performance_graph, 0, 1)
 
-        self.cheque_count_graph = self.create_graph_widget("Nombre de chèques traités")
-        graphs_layout.addWidget(self.cheque_count_graph, 1, 0)
+        self.bank_transactions_graph = self.create_graph_widget("Évolution des Transactions par Banque")
+        graphs_layout.addWidget(self.bank_transactions_graph, 1, 0)
 
+        self.cheque_count_graph = self.create_graph_widget("Nombre de Chèques Traités par Mois")
+        graphs_layout.addWidget(self.cheque_count_graph, 1, 1)
+
+        # Bouton de retour
         back_btn = QPushButton("Retour à la page principale")
         back_btn.clicked.connect(self.show_main_page)
-        graphs_layout.addWidget(back_btn, 1, 1)
+        graphs_layout.addWidget(back_btn, 2, 0, 1, 2)
+
+        # Définir les espacements
+        graphs_layout.setVerticalSpacing(20)
+        graphs_layout.setHorizontalSpacing(20)
+        graphs_layout.setContentsMargins(20, 20, 20, 20)
 
     def show_graphs_page(self):
         self.update_transaction_graph()
         self.refresh_performance_graph()
+        self.update_bank_transactions_graph()  # Mettre à jour le nouveau graphique
         self.update_cheque_count_graph()
         self.stacked_widget.setCurrentWidget(self.graphs_page)
+
+    def update_bank_transactions_graph(self):
+        try:
+            ca = certifi.where()
+            client = pymongo.MongoClient(
+                "mongodb+srv://stokage15:12345@cluster0.o33im.mongodb.net/xyzdb?retryWrites=true&w=majority",
+                tlsCAFile=ca
+            )
+            db = client['myFirstDatabase']
+            collection = db['transactions']
+
+            # Agréger les données par banque et par mois
+            pipeline = [
+                {
+                    "$group": {
+                        "_id": {
+                            "banque": "$banque_emetrice",
+                            "year": {"$year": "$date"},
+                            "month": {"$month": "$date"}
+                        },
+                        "total": {"$sum": {"$toDouble": "$montant"}},
+                    }
+                },
+                {"$sort": {"_id.year": 1, "_id.month": 1}}
+            ]
+
+            results = list(collection.aggregate(pipeline))
+
+            # Préparer les données pour le graphique
+            banks = list(set([r['_id']['banque'] for r in results]))
+            dates = sorted(set([(r['_id']['year'], r['_id']['month']) for r in results]))
+            
+            fig = self.bank_transactions_graph.findChild(FigureCanvas).figure
+            fig.clear()
+            ax = fig.add_subplot(111)
+
+            for bank in banks:
+                amounts = []
+                for date in dates:
+                    result = next((r for r in results if r['_id']['banque'] == bank and 
+                               r['_id']['year'] == date[0] and r['_id']['month'] == date[1]), None)
+                    amounts.append(result['total'] if result else 0)
+
+                date_strings = [f"{date[0]}-{date[1]:02d}" for date in dates]
+                ax.plot(date_strings, amounts, marker='o', label=bank)
+
+            ax.set_xlabel('Date')
+            ax.set_ylabel('Montant Total (DA)')
+            ax.set_title('Évolution des Transactions par Banque')
+            ax.legend()
+            ax.tick_params(axis='x', rotation=45)   
+
+            ax.grid(True, linestyle='--', alpha=0.7)
+            ax.spines['top'].set_visible(False)
+            ax.spines['right'].set_visible(False)
+
+            mplcursors.cursor(ax, hover=True).connect(
+            "add", lambda sel: sel.annotation.set_text(
+                f'Banque: {sel.artist.get_label()}\nDate: {sel.target[0]}\nMontant: {sel.target[1]:.2f} DA'
+            ))
+
+            fig.tight_layout()
+            self.bank_transactions_graph.findChild(FigureCanvas).draw()
+
+        except Exception as e:
+            print(f"Erreur lors de la mise à jour du graphique des transactions par banque : {str(e)}")
 
     def show_main_page(self):
         self.stacked_widget.setCurrentWidget(self.main_page)
