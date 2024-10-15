@@ -100,7 +100,20 @@ class ChequeProcessor(QMainWindow):
         # Bouton de retour
         back_btn = QPushButton("Retour à la page principale")
         back_btn.clicked.connect(self.show_main_page)
-        graphs_layout.addWidget(back_btn, 2, 0, 1, 2)
+        back_btn.setFixedSize(100, 30)
+        back_btn.setStyleSheet("""
+        QPushButton {
+            background-color: #4CAF50;
+            color: white;
+            border: none;
+            padding: 5px 10px;
+            font-size: 12px;
+            border-radius: 3px;
+        }
+        QPushButton:hover {
+            background-color: #45a049;
+        }""")
+        graphs_layout.addWidget(back_btn, 2, 0, 1, 2, alignment=Qt.AlignmentFlag.AlignCenter)
 
         # Définir les espacements
         graphs_layout.setVerticalSpacing(20)
