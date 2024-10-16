@@ -4,15 +4,13 @@ import cv2
 import torch
 import numpy as np
 from PIL import Image 
-import certifi
-import pymongo
 import requests
 from pathlib import Path
 import os
 import re
-from datetime import datetime
 from word2numberi18n import w2n
-
+import shutil
+from pathlib import Path
 # Image preprocessing functions
 def estimate_noise(image):
     return np.std(image)
@@ -91,6 +89,10 @@ def preprocess_cheque_image(image_path):
     # Step 5: Selective Skew Correction
     corrected_image, angle = adaptive_skew_correction(gamma_corrected, max_angle=2)
 
+    # save corrected_image
+
+    cv2.imwrite('./corrected_image.png', corrected_image)
+
     return corrected_image
 
 # YOLO model functions
@@ -98,6 +100,11 @@ def preprocess_cheque_image(image_path):
 def run_yolo_model(image_path):
     image = preprocess_cheque_image(image_path)
     save_dir='./cropped_images'
+    if os.path.exists(save_dir) and os.path.isdir(save_dir):
+        shutil.rmtree(save_dir)
+    
+    Path(save_dir).mkdir(parents=True, exist_ok=True)
+
     model = YOLO('/Users/sarahhaddad/Documents/GitHub/TrOCR/models/model_yolo/best.pt').to('cpu')
     image = cv2.cvtColor(image, cv2.COLOR_BGR2RGB)
     results = model(image)

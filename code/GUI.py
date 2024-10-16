@@ -141,21 +141,20 @@ class ChequeProcessor(QMainWindow):
 
             # Aggregate data by bank and month
             pipeline = [
-            {
-                "$group": {
-                    "_id": {
-                        "banque": "$banque_emetrice",
-                        "year": {"$year": "$date"},
-                        "month": {"$month": "$date"}
-                    },
-                    "count": {"$sum": 1}
-                }
-            },
-            {"$sort": {"_id.year": 1, "_id.month": 1}}
+                {
+                    "$group": {
+                        "_id": {
+                            "banque": "$banque_emetrice",
+                            "year": {"$year": "$date"},
+                            "month": {"$month": "$date"}
+                        },
+                        "count": {"$sum": 1}
+                    }
+                },
+                {"$sort": {"_id.year": 1, "_id.month": 1}}
             ]
 
             results = list(collection.aggregate(pipeline))
-
 
             banks = sorted(set(r['_id']['banque'] for r in results))
             dates = sorted(set((r['_id']['year'], r['_id']['month']) for r in results))
@@ -164,8 +163,8 @@ class ChequeProcessor(QMainWindow):
             fig.clear()
             ax = fig.add_subplot(111)
 
-            # Use a color-blind friendly colormap
-            colors = plt.colormaps['Set2'](np.linspace(0, 1, len(banks)))
+            # Use a color palette similar to the one used in other graphs
+            colors = plt.cm.get_cmap('tab10')(np.linspace(0, 1, len(banks)))
 
             for i, bank in enumerate(banks):
                 counts = []
@@ -175,30 +174,47 @@ class ChequeProcessor(QMainWindow):
 
                 date_strings = [f"{date[0]}-{date[1]:02d}" for date in dates]
             
-                # Plot transaction count
-                ax.plot(date_strings, counts, marker='o', label=bank, color=colors[i])
+                # Plot transaction count with consistent styling
+                ax.plot(date_strings, counts, marker='o', label=bank, color=colors[i], linewidth=2, markersize=6)
 
-            # Customize the plot
-            ax.set_xlabel('Date')
-            ax.set_ylabel('Nombre de Transactions')
-            ax.set_title('Évolution du Nombre de Transactions par Banque')
+            # Customize the plot to match other graphs
+            ax.set_facecolor('#f0f0f0')
+            ax.set_xlabel('Date', fontsize=12, fontweight='bold')
+            ax.set_ylabel('Nombre de Transactions', fontsize=12, fontweight='bold')
+            ax.set_title('Évolution des Transactions par Banque', fontsize=14, fontweight='bold')
+            ax.tick_params(axis='both', which='major', labelsize=10)
+            ax.grid(True, linestyle='--', alpha=0.7, color='#cccccc')
+            ax.spines['top'].set_visible(False)
+            ax.spines['right'].set_visible(False)
+            ax.spines['bottom'].set_color('#999999')
+            ax.spines['left'].set_color('#999999')
+
+            # Format y-axis to show integer values
             ax.yaxis.set_major_formatter(plt.FuncFormatter(lambda x, p: f'{int(x):,d}'))
-            ax.tick_params(axis='x', rotation=45)
-            ax.grid(True, linestyle='--', alpha=0.7)
-            ax.legend(loc='upper left', bbox_to_anchor=(1, 1))
 
-            # Adjust layout
+            # Rotate x-axis labels for better readability
+            plt.setp(ax.get_xticklabels(), rotation=45, ha='right')
+
+            # Add legend with a semi-transparent background
+            legend = ax.legend(loc='upper left', bbox_to_anchor=(1, 1), fontsize=10)
+            legend.get_frame().set_alpha(0.7)
+            legend.get_frame().set_facecolor('white')
+
+            # Adjust layout to prevent clipping of labels
             fig.tight_layout()
 
             # Add interactivity
             mplcursors.cursor(ax, hover=True).connect(
-                "add", lambda sel: sel.annotation.set_text(f'Banque: {sel.artist.get_label()}\nDate: {sel.target[0]}\nNombre: {int(sel.target[1]):,d}'
-                ))
+                "add", lambda sel: sel.annotation.set_text(
+                    f'Banque: {sel.artist.get_label()}\nDate: {sel.target[0]}\nNombre: {int(sel.target[1]):,d}'
+                )
+            )
 
             self.bank_transactions_graph.findChild(FigureCanvas).draw()
 
         except Exception as e:
             print(f"Erreur lors de la mise à jour du graphique des transactions par banque : {str(e)}")
+
 
     def show_main_page(self):
         self.stacked_widget.setCurrentWidget(self.main_page)
@@ -514,7 +530,7 @@ class ChequeProcessor(QMainWindow):
     def process_cheque(self, file_path):
         try:
             pixmap = QPixmap(file_path)
-            pixmap = pixmap.scaled(300, 300, Qt.AspectRatioMode.KeepAspectRatio)
+            pixmap = pixmap.scaled(500, 500, Qt.AspectRatioMode.KeepAspectRatio)
             self.upload_frame.setPixmap(pixmap)
         
             bank = classify_cheque(file_path)
@@ -541,7 +557,7 @@ class ChequeProcessor(QMainWindow):
                 # Show result window
                 self.show_result_window(file_path, bank, result)
                 # Calculate and show balance
-                self.show_balance()
+                self.show_balance(bank)  # Pass the detected bank to show_balance
             else:
                 QMessageBox.warning(self, "Processing Failed", "La similarité est trop faible pour accepter le résultat.")
                 self.show_result_window(file_path, bank, result)
@@ -551,20 +567,74 @@ class ChequeProcessor(QMainWindow):
         except Exception as e:
             QMessageBox.critical(self, "Erreur", f"Une erreur est survenue: {str(e)}")
 
-    def show_balance(self):
+    def show_balance(self, emettrice):
         try:
-            emettrice = "CCP"
             debitrice = "CPA"
-            balance = self.calculate_bank_balance(emettrice, debitrice)
+            current_date = datetime.now().date()
+            balance = self.calculate_bank_balance(emettrice, debitrice, current_date)
             if balance > 0:
-                result = f"Solde: {debitrice} doit {abs(balance):.2f} DA à {emettrice}"
+                result = f"Solde du jour: {debitrice} doit {abs(balance):.2f} DA à {emettrice}"
             elif balance < 0:
-                result = f"Solde: {emettrice} doit {abs(balance):.2f} DA à {debitrice}"
+                result = f"Solde du jour: {emettrice} doit {abs(balance):.2f} DA à {debitrice}"
             else:
-                result = f"Solde: 0.00 DA entre {emettrice} et {debitrice}"
-            QMessageBox.information(self, "Solde Actuel", result)
+                result = f"Solde du jour: 0.00 DA entre {emettrice} et {debitrice}"
+            QMessageBox.information(self, "Solde du Jour", result)
         except Exception as e:
-            QMessageBox.warning(self, "Erreur de Solde", f"Erreur lors du calcul du solde: {str(e)}")
+            QMessageBox.warning(self, "Erreur de Solde", f"Erreur lors du calcul du solde du jour: {str(e)}")
+
+    def calculate_bank_balance(self, emettrice, debitrice, current_date):
+        ca = certifi.where()
+        client = pymongo.MongoClient(
+            "mongodb+srv://stokage15:12345@cluster0.o33im.mongodb.net/xyzdb?retryWrites=true&w=majority",
+            tlsCAFile=ca
+        )
+        db = client['myFirstDatabase']
+        collection = db['transactions']
+
+        # Set the start and end of the current day
+        start_of_day = datetime.combine(current_date, datetime.min.time())
+        end_of_day = datetime.combine(current_date, datetime.max.time())
+
+        pipeline = [
+            {
+                "$match": {
+                    "$and": [
+                        {
+                            "$or": [
+                                {"banque_emetrice": emettrice, "banque_debitrice": debitrice},
+                                {"banque_emetrice": debitrice, "banque_debitrice": emettrice}
+                            ]
+                        },
+                        {"date": {"$gte": start_of_day, "$lte": end_of_day}}
+                    ]
+                }
+            },
+            {
+                "$group": {
+                    "_id": "$banque_emetrice",
+                    "total": {
+                        "$sum": {
+                            "$cond": [
+                                {"$eq": ["$montant", {"$toInt": "$montant"}]},
+                                {"$toInt": "$montant"},
+                                {"$toDouble": "$montant"}
+                            ]
+                        }
+                    }
+                }
+            }
+        ]
+
+        results = list(collection.aggregate(pipeline))
+
+        balance = Decimal('0')
+        for result in results:
+            if result['_id'] == emettrice:
+                balance -= Decimal(str(result['total']))
+            else:
+                balance += Decimal(str(result['total']))
+
+        return balance
 
     def insert_to_mongodb(self, montant, similarity_percentage, bank):
         if similarity_percentage >= 99:
@@ -618,8 +688,8 @@ class ChequeProcessor(QMainWindow):
         layout.addWidget(img_frame)
 
         # Load and display image
-        pixmap = QPixmap(file_path)
-        pixmap = pixmap.scaled(300, 300, Qt.AspectRatioMode.KeepAspectRatio)
+        pixmap = QPixmap('./corrected_image.png')
+        pixmap = pixmap.scaled(500, 500, Qt.AspectRatioMode.KeepAspectRatio)
         img_label = QLabel()
         img_label.setPixmap(pixmap)
         img_layout.addWidget(img_label, alignment=Qt.AlignmentFlag.AlignCenter)
@@ -666,51 +736,6 @@ class ChequeProcessor(QMainWindow):
             QMessageBox.information(self, "Succès","Traitement réussi avec succès!")
         else:
             QMessageBox.warning(self, "Attention", f"Le traitement n'a pas réussi. La similarité est de {similarity:.2f}%")
-
-    def calculate_bank_balance(self, emettrice, debitrice):
-        ca = certifi.where()
-        client = pymongo.MongoClient(
-            "mongodb+srv://stokage15:12345@cluster0.o33im.mongodb.net/xyzdb?retryWrites=true&w=majority",
-            tlsCAFile=ca
-        )
-        db = client['myFirstDatabase']
-        collection = db['transactions']
-
-        pipeline = [
-            {
-                "$match": {
-                    "$or": [
-                        {"banque_emetrice": emettrice, "banque_debitrice": debitrice},
-                        {"banque_emetrice": debitrice, "banque_debitrice": emettrice}
-                    ]
-                }
-            },
-            {
-                "$group": {
-                    "_id": "$banque_emetrice",
-                    "total": {
-                        "$sum": {
-                            "$cond": [
-                                {"$eq": ["$montant", {"$toInt": "$montant"}]},
-                                {"$toInt": "$montant"},
-                                {"$toDouble": "$montant"}
-                            ]
-                        }
-                    }
-                }
-            }
-        ]
-
-        results = list(collection.aggregate(pipeline))
-
-        balance = Decimal('0')
-        for result in results:
-            if result['_id'] == emettrice:
-                balance -= Decimal(str(result['total']))
-            else:
-                balance += Decimal(str(result['total']))
-
-        return balance
 
     def toggle_camera(self):
         if self.camera is None:
